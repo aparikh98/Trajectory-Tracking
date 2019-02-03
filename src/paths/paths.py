@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Starter script for lab1. 
+Starter script for lab1.
 Author: Chris Correa
 """
 import numpy as np
@@ -38,7 +38,7 @@ class MotionPath:
 
         Parameters
         ----------
-        time : float        
+        time : float
 
         Returns
         -------
@@ -94,7 +94,7 @@ class MotionPath:
         plt.plot(times, target_velocities[:,0], label='Desired')
         plt.xlabel("Time (t)")
         plt.ylabel("X Velocity")
-            
+
         plt.subplot(3,2,3)
         plt.plot(times, target_positions[:,1], label='Desired')
         plt.xlabel("time (t)")
@@ -104,7 +104,7 @@ class MotionPath:
         plt.plot(times, target_velocities[:,1], label='Desired')
         plt.xlabel("Time (t)")
         plt.ylabel("Y Velocity")
-            
+
         plt.subplot(3,2,5)
         plt.plot(times, target_positions[:,2], label='Desired')
         plt.xlabel("time (t)")
@@ -126,16 +126,16 @@ class MotionPath:
         jointspace : bool
             What kind of trajectory.  Joint space points are 7x' and describe the
             angle of each arm.  Workspace points are 3x', and describe the x,y,z
-            position of the end effector.  
+            position of the end effector.
         """
         traj = JointTrajectory()
-        traj.joint_names = self.limb.joint_names()    
+        traj.joint_names = self.limb.joint_names()
         points = []
         for t in np.linspace(0, self.total_time, num=num_waypoints):
             point = self.trajectory_point(t, jointspace)
             points.append(point)
 
-        # We want to make a final point at the end of the trajectory so that the 
+        # We want to make a final point at the end of the trajectory so that the
         # controller has time to converge to the final point.
         extra_point = self.trajectory_point(self.total_time, jointspace)
         extra_point.time_from_start = rospy.Duration.from_sec(self.total_time + 1)
@@ -150,16 +150,16 @@ class MotionPath:
     def trajectory_point(self, t, jointspace):
         """
         takes a discrete point in time, and puts the position, velocity, and
-        acceleration into a ROS JointTrajectoryPoint() to be put into a 
-        RobotTrajectory.  
-        
+        acceleration into a ROS JointTrajectoryPoint() to be put into a
+        RobotTrajectory.
+
         Parameters
         ----------
         t : float
         jointspace : bool
             What kind of trajectory.  Joint space points are 7x' and describe the
             angle of each arm.  Workspace points are 3x', and describe the x,y,z
-            position of the end effector.  
+            position of the end effector.
 
         Returns
         -------
@@ -173,7 +173,7 @@ class MotionPath:
             theta_t_2 = self.get_ik(self.target_position(t-2*delta_t))
             theta_t_1 = self.get_ik(self.target_position(t-delta_t))
             theta_t   = self.get_ik(self.target_position(t))
-            
+
             # we said you shouldn't simply take a finite difference when creating
             # the path, why do you think we're doing that here?
             point.positions = theta_t
@@ -189,7 +189,7 @@ class MotionPath:
     def get_ik(self, x, max_ik_attempts=10):
         """
         gets ik
-        
+
         Parameters
         ----------
         x : 3x' :obj:`numpy.ndarray`
@@ -216,7 +216,7 @@ class MotionPath:
         return theta
 
 class LinearPath(MotionPath):
-    def __init__(self):
+    def __init__(self, limb, kin, total_time, goal, current_position):
         """
         Remember to call the constructor of MotionPath
 
@@ -224,7 +224,11 @@ class LinearPath(MotionPath):
         ----------
         ????? You're going to have to fill these in how you see fit
         """
-        raise NotImplementedError
+        super(LinearPath, self, limb, kin, total_time).__init__()
+        #TODO: figure out how to get this stuff
+        self.goal = goal
+        self.current_position = current_position
+        self.distance = self.current_position - goal
 
     def target_position(self, time):
         """
@@ -232,14 +236,19 @@ class LinearPath(MotionPath):
 
         Parameters
         ----------
-        time : float        
-    
+        time : float
+
         Returns
         -------
         3x' :obj:`numpy.ndarray`
             desired x,y,z position in workspace coordinates of the end effector
         """
-        raise NotImplementedError       
+        if time < total_time/2:
+            distance = 1/2 * target_acceleration(time) * (time ** 2)
+        else:
+            distance = 1/2 * target_acceleration(self.total_time/2) * (self.total_time/2 ** 2) +
+            distance += (1/2 * target_acceleration(time) * ((time- self.total_time/2)** 2) + target_velocity(self.total_time/2)  * (time - self.total_time/2))
+        return distance
 
     def target_velocity(self, time):
         """
@@ -256,7 +265,11 @@ class LinearPath(MotionPath):
         3x' :obj:`numpy.ndarray`
             desired velocity in workspace coordinates of the end effector
         """
-        raise NotImplementedError
+        if time < total_time/2:
+            velocity = time * target_acceleration(time)
+        else:
+            velocity = target_velocity(self.total_time/2) - time * target_acceleration(time- self.total_time/2)
+        return velocity
 
     def target_acceleration(self, time):
         """
@@ -271,12 +284,17 @@ class LinearPath(MotionPath):
         Returns
         -------
         3x' :obj:`numpy.ndarray`
+
             desired acceleration in workspace coordinates of the end effector
         """
-        raise NotImplementedError
+        acceleration = distance * 4 / self.total_time**2;
+        if time < self.total_time/2:
+            return acceleration
+        else:
+            return -1 * acceleration
 
 class CircularPath(MotionPath):
-    def __init__(self):
+    def __init__(self, limb, kin, total_time, goal, current_position):
         """
         Remember to call the constructor of MotionPath
 
@@ -284,7 +302,14 @@ class CircularPath(MotionPath):
         ----------
         ????? You're going to have to fill these in how you see fit
         """
-        raise NotImplementedError
+        super(CircularPath, self, limb, kin, total_time).__init__()
+        #TODO: figure out how to get this stuff
+        self.current_position = current_position
+        self.goal = goal
+        self.radius = utils.length(current_position - goal)
+        self.circumference = 2 * math.pi * self.radius
+        self.theta_0 = np.arctan((current_position[0]-goal[0])/(current_position[1]-goal[1])
+
 
     def target_position(self, time):
         """
@@ -292,14 +317,15 @@ class CircularPath(MotionPath):
 
         Parameters
         ----------
-        time : float        
+        time : float
 
         Returns
         -------
         3x' :obj:`numpy.ndarray`
            desired x,y,z position in workspace coordinates of the end effector
         """
-        raise NotImplementedError
+        theta = 1/2 * angular_acceleration * time **2 - theta_0
+        raise return np.array([self.radius * cos(theta), self.radius * sin(theta), 0]) - self.goal
 
     def target_velocity(self, time):
         """
@@ -316,7 +342,13 @@ class CircularPath(MotionPath):
         3x' :obj:`numpy.ndarray`
            desired x,y,z velocity in workspace coordinates of the end effector
         """
-        raise NotImplementedError
+
+        angular_acceleration = math.pi * 4 /self.total_time**2;
+        theta = 1/2 * angular_acceleration * time **2 - theta_0
+        omega = angular_acceleration * time
+        velocity = np.array([-self.radius * omega * sin(theta), self.radius * omega * cos(theta), 0])
+
+        return velocity
 
     def target_acceleration(self, time):
         """
@@ -333,22 +365,52 @@ class CircularPath(MotionPath):
         3x' :obj:`numpy.ndarray`
            desired acceleration in workspace coordinates of the end effector
         """
-        raise NotImplementedError
+        if time < self.total_time/2:
+            angular_acceleration = math.pi * 8 /self.total_time**2;
+        else:
+            angular_acceleration = - 1* math.pi * 8 /self.total_time**2;
 
+        theta = 1/2 * angular_acceleration * time **2 - theta_0
+        omega = angular_acceleration * time
+
+        acceleration = np.array([-self.radius * (omega **2) * cos(theta),-self.radius * (omega **2) * sin(theta), 0 ])
+        return acceleration
 
 class MultiplePaths(MotionPath):
     """
     Remember to call the constructor of MotionPath
-    
+
     You can implement multiple paths a couple ways.  The way I chose when I took
-    the class was to create several different paths and pass those into the 
+    the class was to create several different paths and pass those into the
     MultiplePaths object, which would determine when to go onto the next path.
     """
-    def __init__(self, paths):
-        raise NotImplementedError
+    def __init__(self, paths, limb, kin, total_time, current_position):
+        super(MultiplePaths, self, limb, kin, total_time).__init__()
+        #TODO: figure out how to get this stuff
+        self.numpaths = len(paths)
+        if self.num_paths != 4:
+            return
+        paths = paths.sort(key=lambda a: a[0])
+        if (paths[0][1] > paths[1][1]):
+            temp = paths[0]
+            paths[0] = paths[1]
+            paths[1] = temp
+        if (paths[2][1] < paths[3][1]):
+            temp = paths[2]
+            paths[2] = paths[3]
+            paths[3] = temp
+        self.paths = paths
+        self.trajectories = []
+        self.trajectories[0] = LinearPath(limb, kin, total_time/num_paths, paths[0], current_position)
+        self.trajectories[1] = LinearPath(limb, kin, total_time/num_paths, paths[1], paths[0])
+        self.trajectories[2] = LinearPath(limb, kin, total_time/num_paths, paths[2], paths[1])
+        self.trajectories[3] = LinearPath(limb, kin, total_time/num_paths, paths[3], paths[2])
+
+
+
 
     def get_current_path(self, time):
-        raise NotImplementedError
+        return (int)(time/self.total_time * self.num_paths))
 
     def target_position(self, time):
         """
@@ -356,14 +418,15 @@ class MultiplePaths(MotionPath):
 
         Parameters
         ----------
-        time : float        
+        time : float
 
         Returns
         -------
         3x' :obj:`numpy.ndarray`
             desired position in workspace coordinates of the end effector
         """
-        raise NotImplementedError
+        current_path = get_current_path(time)
+        return self.trajectories[current_path].target_position(time - current_path * total_time/num_paths)
 
     def target_velocity(self, time):
         """
@@ -379,7 +442,8 @@ class MultiplePaths(MotionPath):
         3x' :obj:`numpy.ndarray`
             desired velocity in workspace coordinates of the end effector
         """
-        raise NotImplementedError
+        current_path = get_current_path(time)
+        return self.trajectories[current_path].target_velocity(time - current_path * total_time/num_paths)
 
     def target_acceleration(self, time):
         """
@@ -395,4 +459,5 @@ class MultiplePaths(MotionPath):
         3x' :obj:`numpy.ndarray`
             desired acceleration in workspace coordinates of the end effector
         """
-        raise NotImplementedError
+        current_path = get_current_path(time)
+        return self.trajectories[current_path].target_acceleration(time - current_path * total_time/num_paths)
