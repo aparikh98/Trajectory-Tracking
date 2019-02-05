@@ -216,7 +216,7 @@ class MotionPath:
         return theta
 
 class LinearPath(MotionPath):
-    def __init__(self, limb, kin, total_time, goal, current_position):
+    def __init__(self, limb, kin, tag_pos, total_time, current_position):
         """
         Remember to call the constructor of MotionPath
 
@@ -224,9 +224,9 @@ class LinearPath(MotionPath):
         ----------
         ????? You're going to have to fill these in how you see fit
         """
-        super(LinearPath, self, limb, kin, total_time).__init__()
-        #TODO: figure out how to get this stuff
-        self.goal = goal
+        super(LinearPath, self).__init__(limb, kin, total_time)
+        self.goal = tag_pos
+        self.goal[2] = current_position[2];
         self.current_position = current_position
         self.distance = self.current_position - goal
 
@@ -294,7 +294,7 @@ class LinearPath(MotionPath):
             return -1 * acceleration
 
 class CircularPath(MotionPath):
-    def __init__(self, limb, kin, total_time, goal, current_position):
+    def __init__(self, limb, kin, tag_pos, total_time, current_position):
         """
         Remember to call the constructor of MotionPath
 
@@ -302,14 +302,13 @@ class CircularPath(MotionPath):
         ----------
         ????? You're going to have to fill these in how you see fit
         """
-        super(CircularPath, self, limb, kin, total_time).__init__()
+        super(CircularPath, self).__init__(limb, kin, total_time)
         #TODO: figure out how to get this stuff
         self.current_position = current_position
-        self.goal = goal
+        self.goal = tag_pos
         self.radius = utils.length(current_position - goal)
         self.circumference = 2 * math.pi * self.radius
         self.theta_0 = np.arctan((current_position[0]-goal[0])/(current_position[1]-goal[1])
-
 
     def target_position(self, time):
         """
@@ -385,7 +384,7 @@ class MultiplePaths(MotionPath):
     MultiplePaths object, which would determine when to go onto the next path.
     """
     def __init__(self, paths, limb, kin, total_time, current_position):
-        super(MultiplePaths, self, limb, kin, total_time).__init__()
+        super(MultiplePaths, self).__init__(limb, kin, total_time)
         #TODO: figure out how to get this stuff
         self.numpaths = len(paths)
         if self.num_paths != 4:

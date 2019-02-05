@@ -80,12 +80,18 @@ def get_trajectory(task, tag_pos, num_way, controller_name):
     #TODO: for linear path, set goal height to initial height, for multiple paths, set goal height to x above the height
 
     #TODO part a
+    current_position = kin.forward_position_kinematics()[:3];
+    total_time = 20;
     if task == 'line':
-        path = None
+        tag_pos[0][2] = current_position[2]; #linear path moves to a Z position above AR Tag.
+        path = LinearPath(limb, kin, tag_pos[0], total_time, current_position)
     elif task == 'circle':
-        path = None
+        tag_pos[0][2] = current_position[2]; #linear path moves to a Z position above AR Tag.
+        path = CircularPath(limb, kin, tag_pos[0], total_time, current_position)
     elif task == 'square':
-        path = None
+        for tag in tag_pos:
+            tag[2] = tag[2] + 0.3  #have a goal position slightly above the AR Tag so we don't hit anything
+        path = MultiplePaths(limb, kin, tag_pos, total_time, current_position)
     else:
         raise ValueError('task {} not recognized'.format(task))
     return path.to_robot_trajectory(num_way, controller_name!='workspace')
