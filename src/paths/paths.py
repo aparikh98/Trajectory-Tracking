@@ -226,7 +226,6 @@ class LinearPath(MotionPath):
         """
         super(LinearPath, self).__init__(limb, kin, total_time)
         self.goal = tag_pos
-        self.goal[2] = current_position[2];
         self.current_position = current_position
         self.distance = self.current_position - goal
 
