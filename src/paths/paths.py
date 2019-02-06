@@ -8,7 +8,7 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 
-from utils.utils import *
+import utils.utils as utils
 
 try:
     import rospy
@@ -83,37 +83,54 @@ class MotionPath:
         times = np.linspace(0, self.total_time, num=num)
         target_positions = np.vstack([self.target_position(t) for t in times])
         target_velocities = np.vstack([self.target_velocity(t) for t in times])
+        target_acceleration = np.vstack([self.target_acceleration(t) for t in times])
 
         plt.figure()
-        plt.subplot(3,2,1)
+        plt.subplot(3,3,1)
         plt.plot(times, target_positions[:,0], label='Desired')
         plt.xlabel("Time (t)")
         plt.ylabel("X Position")
 
-        plt.subplot(3,2,2)
+        plt.subplot(3,3,2)
         plt.plot(times, target_velocities[:,0], label='Desired')
         plt.xlabel("Time (t)")
         plt.ylabel("X Velocity")
 
-        plt.subplot(3,2,3)
+        plt.subplot(3,3,4)
         plt.plot(times, target_positions[:,1], label='Desired')
         plt.xlabel("time (t)")
         plt.ylabel("Y Position")
 
-        plt.subplot(3,2,4)
+        plt.subplot(3,3,5)
         plt.plot(times, target_velocities[:,1], label='Desired')
         plt.xlabel("Time (t)")
         plt.ylabel("Y Velocity")
 
-        plt.subplot(3,2,5)
+        plt.subplot(3,3,7)
         plt.plot(times, target_positions[:,2], label='Desired')
         plt.xlabel("time (t)")
         plt.ylabel("Z Position")
 
-        plt.subplot(3,2,6)
+        plt.subplot(3,3,8)
         plt.plot(times, target_velocities[:,2], label='Desired')
         plt.xlabel("Time (t)")
         plt.ylabel("Z Velocity")
+
+        plt.subplot(3,3,3)
+        plt.plot(times, target_acceleration[:,0], label='Desired')
+        plt.xlabel("time (t)")
+        plt.ylabel("x acceleration")
+
+        plt.subplot(3,3,6)
+        plt.plot(times, target_acceleration[:,1], label='Desired')
+        plt.xlabel("Time (t)")
+        plt.ylabel("y acceleration")
+
+        plt.subplot(3,3,9)
+        plt.plot(times, target_acceleration[:,2], label='Desired')
+        plt.xlabel("Time (t)")
+        plt.ylabel("z acceleration")
+
 
         plt.show()
 
@@ -224,10 +241,11 @@ class LinearPath(MotionPath):
         ----------
         ????? You're going to have to fill these in how you see fit
         """
-        super(LinearPath, self).__init__(limb, kin, total_time)
+        MotionPath.__init__(self, limb, kin, total_time)
         self.goal = tag_pos
         self.current_position = current_position
-        self.distance = self.current_position - goal
+        self.distance = self.goal -self.current_position
+        print(self.distance)
 
     def target_position(self, time):
         """
@@ -242,12 +260,16 @@ class LinearPath(MotionPath):
         3x' :obj:`numpy.ndarray`
             desired x,y,z position in workspace coordinates of the end effector
         """
-        if time < total_time/2:
-            distance = 1/2 * target_acceleration(time) * (time ** 2)
+        if time <= self.total_time/2.0:
+            distance= 1/2.0 * self.target_acceleration(time) * (time ** 2) +  self.target_velocity(time) * time
+            return distance + self.current_position
+
         else:
-            distance = 1/2 * target_acceleration(self.total_time/2) * (self.total_time/2 ** 2) +
-            distance += (1/2 * target_acceleration(time) * ((time- self.total_time/2)** 2) + target_velocity(self.total_time/2)  * (time - self.total_time/2))
-        return distance
+        	from_half = time - self.total_time/2.0 
+        	d_halfway = 1/2.0 * self.target_acceleration(self.total_time/2.0) * (self.total_time/2.0 ** 2) + self.target_velocity(self.total_time/2.0) * self.total_time/2.0
+        	d_remain =  1/2.0 * self.target_acceleration(time) * (from_half ** 2)  
+        	distance = d_halfway + d_remain
+        	return distance + self.current_position
 
     def target_velocity(self, time):
         """
@@ -264,10 +286,10 @@ class LinearPath(MotionPath):
         3x' :obj:`numpy.ndarray`
             desired velocity in workspace coordinates of the end effector
         """
-        if time < total_time/2:
-            velocity = time * target_acceleration(time)
+        if time <= self.total_time/2.0:
+            velocity = time * self.target_acceleration(time)
         else:
-            velocity = target_velocity(self.total_time/2) - time * target_acceleration(time- self.total_time/2)
+            velocity = self.target_velocity(self.total_time/2.0) + (time-self.total_time/2.0) * self.target_acceleration(time)
         return velocity
 
     def target_acceleration(self, time):
@@ -286,8 +308,8 @@ class LinearPath(MotionPath):
 
             desired acceleration in workspace coordinates of the end effector
         """
-        acceleration = distance * 4 / self.total_time**2;
-        if time < self.total_time/2:
+        acceleration = (self.distance * 4) / (self.total_time**2);
+        if time <= self.total_time/2.0:
             return acceleration
         else:
             return -1 * acceleration
@@ -301,13 +323,14 @@ class CircularPath(MotionPath):
         ----------
         ????? You're going to have to fill these in how you see fit
         """
-        super(CircularPath, self).__init__(limb, kin, total_time)
+        MotionPath.__init__(self, limb, kin, total_time)
         #TODO: figure out how to get this stuff
         self.current_position = current_position
         self.goal = tag_pos
-        self.radius = utils.length(current_position - goal)
+        self.radius = utils.length(self.current_position - self.goal)
         self.circumference = 2 * math.pi * self.radius
-        self.theta_0 = np.arctan((current_position[0]-goal[0])/(current_position[1]-goal[1])
+        self.theta_0 = np.arctan((self.current_position[0]-self.goal[0])/(self.current_position[1]-self.goal[1]))
+        print(self.theta_0)
 
     def target_position(self, time):
         """
@@ -322,8 +345,13 @@ class CircularPath(MotionPath):
         3x' :obj:`numpy.ndarray`
            desired x,y,z position in workspace coordinates of the end effector
         """
-        theta = 1/2 * angular_acceleration * time **2 - theta_0
-        raise return np.array([self.radius * cos(theta), self.radius * sin(theta), 0]) - self.goal
+        if time < self.total_time/2.0:
+            angular_acceleration = (math.pi * 8) /(self.total_time**2);
+        else:
+            angular_acceleration = (- 1* math.pi * 8) /(self.total_time**2);
+
+        theta = 1/2.0 * angular_acceleration * time **2 - self.theta_0
+        return np.array([self.radius * np.cos(theta), self.radius * np.sin(theta), 0]) - self.goal
 
     def target_velocity(self, time):
         """
@@ -341,10 +369,13 @@ class CircularPath(MotionPath):
            desired x,y,z velocity in workspace coordinates of the end effector
         """
 
-        angular_acceleration = math.pi * 4 /self.total_time**2;
-        theta = 1/2 * angular_acceleration * time **2 - theta_0
+        if time < self.total_time/2.0:
+            angular_acceleration = math.pi * 8 /self.total_time**2;
+        else:
+            angular_acceleration = - 1* math.pi * 8 /self.total_time**2;
+        theta = 1/2.0 * angular_acceleration * time **2 - self.theta_0
         omega = angular_acceleration * time
-        velocity = np.array([-self.radius * omega * sin(theta), self.radius * omega * cos(theta), 0])
+        velocity = np.array([-self.radius * omega * np.sin(theta), self.radius * omega * np.cos(theta), 0])
 
         return velocity
 
@@ -363,15 +394,21 @@ class CircularPath(MotionPath):
         3x' :obj:`numpy.ndarray`
            desired acceleration in workspace coordinates of the end effector
         """
-        if time < self.total_time/2:
-            angular_acceleration = math.pi * 8 /self.total_time**2;
+        from_half = time - self.total_time/2.0 
+        if time <= self.total_time/2.0:
+        	angular_acceleration = (math.pi * 8) /(self.total_time**2)
+        	omega = angular_acceleration * time
+        	theta = 1/2.0 * angular_acceleration * time **2 + omega*time - self.theta_0
+
         else:
-            angular_acceleration = - 1* math.pi * 8 /self.total_time**2;
+        	angular_acceleration = (math.pi * -8) /(self.total_time**2)
+       		omega = angular_acceleration * from_half - angular_acceleration * time
+       		
+       		theta = (1/2.0 * (1) * angular_acceleration * from_half **2) + 1/2.0 * angular_acceleration * time **2 + omega*time - self.theta_0
 
-        theta = 1/2 * angular_acceleration * time **2 - theta_0
-        omega = angular_acceleration * time
 
-        acceleration = np.array([-self.radius * (omega **2) * cos(theta),-self.radius * (omega **2) * sin(theta), 0 ])
+
+        acceleration = np.array([-self.radius * (omega **2) * np.cos(theta),-self.radius * (omega **2) * np.sin(theta), angular_acceleration])
         return acceleration
 
 class MultiplePaths(MotionPath):
@@ -383,7 +420,7 @@ class MultiplePaths(MotionPath):
     MultiplePaths object, which would determine when to go onto the next path.
     """
     def __init__(self, paths, limb, kin, total_time, current_position):
-        super(MultiplePaths, self).__init__(limb, kin, total_time)
+        MultiplePaths.__init__(self, limb, kin, total_time)
         #TODO: figure out how to get this stuff
         self.numpaths = len(paths)
         if self.num_paths != 4:
@@ -408,7 +445,7 @@ class MultiplePaths(MotionPath):
 
 
     def get_current_path(self, time):
-        return (int)(time/self.total_time * self.num_paths))
+        return (int)(time/self.total_time * self.num_paths)
 
     def target_position(self, time):
         """

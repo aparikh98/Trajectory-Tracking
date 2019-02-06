@@ -46,12 +46,13 @@ def lookup_tag(tag_number):
         tag position
     """
     listener = tf.TransformListener()
-    from_frame = 'base'
+    from_frame = 'left_hand_camera'
     to_frame = 'ar_marker_{}'.format(tag_number)
 
     r = rospy.Rate(200)
     while (
-        not listener.frameExists(from_frame) or not listener.frameExists(to_frame)
+        not listener.frameExists(from_frame) or not listener.frameExists(to_frame) 
+        # not listener.waitForTransform(from_frame, to_frame, rospy.Time(), rospy.Duration(0.1))
     ) and (
         not rospy.is_shutdown()
     ):
@@ -81,19 +82,23 @@ def get_trajectory(task, tag_pos, num_way, controller_name):
 
     #TODO part a
     current_position = kin.forward_position_kinematics()[:3];
+    print(current_position)
+    target_pos = tag_pos[0]
+    print(tag_pos)
     total_time = 20;
     if task == 'line':
-        tag_pos[0][2] = current_position[2]; #linear path moves to a Z position above AR Tag.
-        path = LinearPath(limb, kin, tag_pos[0], total_time, current_position)
+        target_pos[0][2] = current_position[2]; #linear path moves to a Z position above AR Tag.
+        path = LinearPath(limb, kin, target_pos[0], total_time, current_position)
     elif task == 'circle':
-        tag_pos[0][2] = current_position[2]; #linear path moves to a Z position above AR Tag.
-        path = CircularPath(limb, kin, tag_pos[0], total_time, current_position)
+        target_pos[0][2] = current_position[2]; #linear path moves to a Z position above AR Tag.
+        path = CircularPath(limb, kin, target_pos[0], total_time, current_position)
     elif task == 'square':
-        for tag in tag_pos:
+        for tag in target_pos:
             tag[2] = tag[2] + 0.3  #have a goal position slightly above the AR Tag so we don't hit anything
-        path = MultiplePaths(limb, kin, tag_pos, total_time, current_position)
+        path = MultiplePaths(limb, kin, target_pos, total_time, current_position)
     else:
         raise ValueError('task {} not recognized'.format(task))
+    path.plot()
     return path.to_robot_trajectory(num_way, controller_name!='workspace')
 
 def get_controller(controller_name):
@@ -138,6 +143,8 @@ if __name__ == "__main__":
     python scripts/main.py -t 2 -ar 2 -c velocity -a left --log
     python scripts/main.py -t 3 -ar 3 -c torque -a right --log
     python scripts/main.py -t 1 -ar 4 5 --path_only --log
+    
+    python scripts/main.py -t 1 -ar 5 --log
 
     You can also change the rate, timeout if you want
     """
@@ -194,9 +201,10 @@ if __name__ == "__main__":
     # is a jointspace or torque controller, it should return a trajectory where the positions
     # and velocities are the positions and velocities of each joint.
     robot_trajectory = get_trajectory(args.task, tag_pos, args.num_way, args.controller_name)
-
+    # print(robot_trajectory)
     # This is a wrapper around MoveIt! for you to use.  We use MoveIt! to go to the start position
     # of the trajectory
+    # print(robot_trajectory)
     planner = PathPlanner('{}_arm'.format(args.arm))
     if args.controller_name == "workspace":
         pose = create_pose_stamped_from_pos_quat(
