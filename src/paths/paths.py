@@ -337,6 +337,28 @@ class CircularPath(MotionPath):
         self.theta_0 = np.arctan((self.current_position[0]-self.goal[0])/(self.current_position[1]-self.goal[1]))
         print(self.theta_0)
 
+    def angular_kinematics(self, time):
+
+        if time <= self.total_time / 2.0:
+            alpha = (math.pi * 8) / (self.total_time ** 2)
+            omega = alpha * time
+            theta = 1 / 2.0 * alpha * time ** 2
+        else:
+            half_time = self.total_time / 2.0
+            after_half_time = time - half_time
+
+            alpha_0 = (math.pi * 8) / (self.total_time ** 2)
+            omega_0 = alpha_0 * half_time
+            theta_0 = 1 / 2.0 * alpha_0 * half_time ** 2
+
+            alpha = (-1) * alpha_0
+            omega = alpha * after_half_time + omega_0
+
+            theta_remain = 1 / 2.0 * alpha * after_half_time ** 2 + omega_0 * after_half_time
+            theta = theta_0 + theta_remain
+
+        return np.array([alpha, omega, theta])
+
     def target_position(self, time):
         """
         Returns where the arm end effector should be at time t
@@ -350,13 +372,11 @@ class CircularPath(MotionPath):
         3x' :obj:`numpy.ndarray`
            desired x,y,z position in workspace coordinates of the end effector
         """
-        if time < self.total_time/2.0:
-            angular_acceleration = (math.pi * 8) /(self.total_time**2);
-        else:
-            angular_acceleration = (- 1* math.pi * 8) /(self.total_time**2);
+        alpha, omega, theta = self.angular_kinematics(time)
 
-        theta = 1/2.0 * angular_acceleration * time **2 - self.theta_0
-        return np.array([self.radius * np.cos(theta), self.radius * np.sin(theta), 0]) - self.goal
+        position = self.radius * np.array([np.cos(theta), np.sin(theta), 0]) - self.goal
+
+        return position
 
     def target_velocity(self, time):
         """
@@ -374,13 +394,9 @@ class CircularPath(MotionPath):
            desired x,y,z velocity in workspace coordinates of the end effector
         """
 
-        if time < self.total_time/2.0:
-            angular_acceleration = math.pi * 8 /self.total_time**2;
-        else:
-            angular_acceleration = - 1* math.pi * 8 /self.total_time**2;
-        theta = 1/2.0 * angular_acceleration * time **2 - self.theta_0
-        omega = angular_acceleration * time
-        velocity = np.array([-self.radius * omega * np.sin(theta), self.radius * omega * np.cos(theta), 0])
+        alpha, omega, theta = self.angular_kinematics(time)
+
+        velocity = self.radius * omega * np.array([-np.sin(theta), np.cos(theta), 0])
 
         return velocity
 
@@ -399,21 +415,11 @@ class CircularPath(MotionPath):
         3x' :obj:`numpy.ndarray`
            desired acceleration in workspace coordinates of the end effector
         """
-        from_half = time - self.total_time/2.0 
-        if time <= self.total_time/2.0:
-        	angular_acceleration = (math.pi * 8) /(self.total_time**2)
-        	omega = angular_acceleration * time
-        	theta = 1/2.0 * angular_acceleration * time **2 + omega*time - self.theta_0
 
-        else:
-        	angular_acceleration = (math.pi * -8) /(self.total_time**2)
-       		omega = angular_acceleration * from_half - angular_acceleration * time
-       		
-       		theta = (1/2.0 * (1) * angular_acceleration * from_half **2) + 1/2.0 * angular_acceleration * time **2 + omega*time - self.theta_0
+        alpha, omega, theta = self.angular_kinematics(time)
 
-
-
-        acceleration = np.array([-self.radius * (omega **2) * np.cos(theta),-self.radius * (omega **2) * np.sin(theta), angular_acceleration])
+        acceleration = -self.radius * (omega ** 2) * np.array([np.cos(theta), np.sin(theta), 0])
+        
         return acceleration
 
 class MultiplePaths(MotionPath):
