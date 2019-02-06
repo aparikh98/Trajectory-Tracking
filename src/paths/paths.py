@@ -260,16 +260,20 @@ class LinearPath(MotionPath):
         3x' :obj:`numpy.ndarray`
             desired x,y,z position in workspace coordinates of the end effector
         """
-        if time <= self.total_time/2.0:
-            distance= 1/2.0 * self.target_acceleration(time) * (time ** 2) +  self.target_velocity(time) * time
-            return distance + self.current_position
+        if time <= self.total_time / 2.0:
+            distance = 1 / 2.0 * self.target_acceleration(time) * (time ** 2)
 
         else:
-        	from_half = time - self.total_time/2.0 
-        	d_halfway = 1/2.0 * self.target_acceleration(self.total_time/2.0) * (self.total_time/2.0 ** 2) + self.target_velocity(self.total_time/2.0) * self.total_time/2.0
-        	d_remain =  1/2.0 * self.target_acceleration(time) * (from_half ** 2)  
-        	distance = d_halfway + d_remain
-        	return distance + self.current_position
+            half_time = self.total_time / 2.0
+            after_half_time = time - half_time
+
+            d_halfway = self.target_position(self.total_time / 2.0)
+            v_halfway = self.target_velocity(self.total_time / 2.0)
+
+            d_remain = 1 / 2.0 * self.target_acceleration(time) * (after_half_time ** 2) + v_halfway * after_half_time
+            distance = d_halfway + d_remain
+
+        return distance + self.current_position
 
     def target_velocity(self, time):
         """
@@ -286,10 +290,11 @@ class LinearPath(MotionPath):
         3x' :obj:`numpy.ndarray`
             desired velocity in workspace coordinates of the end effector
         """
-        if time <= self.total_time/2.0:
+        if time <= self.total_time / 2.0:
             velocity = time * self.target_acceleration(time)
         else:
-            velocity = self.target_velocity(self.total_time/2.0) + (time-self.total_time/2.0) * self.target_acceleration(time)
+            velocity = self.target_velocity(self.total_time / 2.0) + (
+                        time - self.total_time / 2.0) * self.target_acceleration(time)
         return velocity
 
     def target_acceleration(self, time):
@@ -308,8 +313,8 @@ class LinearPath(MotionPath):
 
             desired acceleration in workspace coordinates of the end effector
         """
-        acceleration = (self.distance * 4) / (self.total_time**2);
-        if time <= self.total_time/2.0:
+        acceleration = (self.distance * 4) / (self.total_time ** 2);
+        if time <= self.total_time / 2.0:
             return acceleration
         else:
             return -1 * acceleration
