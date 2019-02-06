@@ -8,9 +8,9 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 
-import utils.utils as utils
 
 try:
+    import utils.utils as utils
     import rospy
     from moveit_msgs.msg import RobotTrajectory
     from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
@@ -96,6 +96,11 @@ class MotionPath:
         plt.xlabel("Time (t)")
         plt.ylabel("X Velocity")
 
+        plt.subplot(3,3,3)
+        plt.plot(times, target_acceleration[:,0], label='Desired')
+        plt.xlabel("time (t)")
+        plt.ylabel("x acceleration")
+
         plt.subplot(3,3,4)
         plt.plot(times, target_positions[:,1], label='Desired')
         plt.xlabel("time (t)")
@@ -106,6 +111,11 @@ class MotionPath:
         plt.xlabel("Time (t)")
         plt.ylabel("Y Velocity")
 
+        plt.subplot(3,3,6)
+        plt.plot(times, target_acceleration[:,1], label='Desired')
+        plt.xlabel("Time (t)")
+        plt.ylabel("y acceleration")
+
         plt.subplot(3,3,7)
         plt.plot(times, target_positions[:,2], label='Desired')
         plt.xlabel("time (t)")
@@ -115,16 +125,6 @@ class MotionPath:
         plt.plot(times, target_velocities[:,2], label='Desired')
         plt.xlabel("Time (t)")
         plt.ylabel("Z Velocity")
-
-        plt.subplot(3,3,3)
-        plt.plot(times, target_acceleration[:,0], label='Desired')
-        plt.xlabel("time (t)")
-        plt.ylabel("x acceleration")
-
-        plt.subplot(3,3,6)
-        plt.plot(times, target_acceleration[:,1], label='Desired')
-        plt.xlabel("Time (t)")
-        plt.ylabel("y acceleration")
 
         plt.subplot(3,3,9)
         plt.plot(times, target_acceleration[:,2], label='Desired')
@@ -244,7 +244,7 @@ class LinearPath(MotionPath):
         MotionPath.__init__(self, limb, kin, total_time)
         self.goal = tag_pos
         self.current_position = current_position
-        self.distance = self.goal -self.current_position
+        self.distance = self.goal - self.current_position
         print(self.distance)
 
     def target_position(self, time):
@@ -262,7 +262,7 @@ class LinearPath(MotionPath):
         """
         if time <= self.total_time / 2.0:
             distance = 1 / 2.0 * self.target_acceleration(time) * (time ** 2)
-
+            return distance + self.current_position
         else:
             half_time = self.total_time / 2.0
             after_half_time = time - half_time
@@ -272,8 +272,7 @@ class LinearPath(MotionPath):
 
             d_remain = 1 / 2.0 * self.target_acceleration(time) * (after_half_time ** 2) + v_halfway * after_half_time
             distance = d_halfway + d_remain
-
-        return distance + self.current_position
+            return distance
 
     def target_velocity(self, time):
         """
@@ -419,7 +418,7 @@ class CircularPath(MotionPath):
         alpha, omega, theta = self.angular_kinematics(time)
 
         acceleration = -self.radius * (omega ** 2) * np.array([np.cos(theta), np.sin(theta), 0])
-        
+
         return acceleration
 
 class MultiplePaths(MotionPath):
@@ -430,13 +429,13 @@ class MultiplePaths(MotionPath):
     the class was to create several different paths and pass those into the
     MultiplePaths object, which would determine when to go onto the next path.
     """
-    def __init__(self, paths, limb, kin, total_time, current_position):
-        MultiplePaths.__init__(self, limb, kin, total_time)
+    def __init__(self, limb, kin, paths, total_time, current_position):
+        MotionPath.__init__(self, limb, kin, total_time)
         #TODO: figure out how to get this stuff
         self.numpaths = len(paths)
-        if self.num_paths != 4:
+        if self.numpaths != 4:
             return
-        paths = paths.sort(key=lambda a: a[0])
+        paths = sorted(paths, key=lambda a: a[0])
         if (paths[0][1] > paths[1][1]):
             temp = paths[0]
             paths[0] = paths[1]
@@ -446,18 +445,18 @@ class MultiplePaths(MotionPath):
             paths[2] = paths[3]
             paths[3] = temp
         self.paths = paths
+        print(self.paths)
         self.trajectories = []
-        self.trajectories[0] = LinearPath(limb, kin, total_time/num_paths, paths[0], current_position)
-        self.trajectories[1] = LinearPath(limb, kin, total_time/num_paths, paths[1], paths[0])
-        self.trajectories[2] = LinearPath(limb, kin, total_time/num_paths, paths[2], paths[1])
-        self.trajectories[3] = LinearPath(limb, kin, total_time/num_paths, paths[3], paths[2])
-
-
-
+        self.timePerPath = total_time/self.numpaths;
+        self.trajectories.append(LinearPath(limb, kin, paths[0], self.timePerPath, current_position))
+        self.trajectories.append(LinearPath(limb, kin, paths[1], self.timePerPath, paths[0]))
+        self.trajectories.append(LinearPath(limb, kin, paths[2], self.timePerPath, paths[1]))
+        self.trajectories.append(LinearPath(limb, kin, paths[3], self.timePerPath, paths[2]))
 
     def get_current_path(self, time):
-        return (int)(time/self.total_time * self.num_paths)
-
+        curpath = min((int)(time/(self.total_time) * self.numpaths), self.numpaths-1)
+        time_on_path = time - (curpath * self.timePerPath)
+        return curpath, time_on_path
     def target_position(self, time):
         """
         Returns where the arm end effector should be at time t
@@ -471,8 +470,9 @@ class MultiplePaths(MotionPath):
         3x' :obj:`numpy.ndarray`
             desired position in workspace coordinates of the end effector
         """
-        current_path = get_current_path(time)
-        return self.trajectories[current_path].target_position(time - current_path * total_time/num_paths)
+        current_path, time_on_path = self.get_current_path(time)
+        # return np.array([current_path, time_on_path, 0])
+        return self.trajectories[current_path].target_position(time_on_path)
 
     def target_velocity(self, time):
         """
@@ -488,8 +488,8 @@ class MultiplePaths(MotionPath):
         3x' :obj:`numpy.ndarray`
             desired velocity in workspace coordinates of the end effector
         """
-        current_path = get_current_path(time)
-        return self.trajectories[current_path].target_velocity(time - current_path * total_time/num_paths)
+        current_path, time_on_path = self.get_current_path(time)
+        return self.trajectories[current_path].target_velocity(time_on_path)
 
     def target_acceleration(self, time):
         """
@@ -505,5 +505,16 @@ class MultiplePaths(MotionPath):
         3x' :obj:`numpy.ndarray`
             desired acceleration in workspace coordinates of the end effector
         """
-        current_path = get_current_path(time)
-        return self.trajectories[current_path].target_acceleration(time - current_path * total_time/num_paths)
+        current_path, time_on_path = self.get_current_path(time)
+        return self.trajectories[current_path].target_acceleration(time_on_path)
+
+
+#use to test paths
+# if __name__ == "__main__":
+#     target_pos = [np.array([0, 0, 3]),np.array([0, 4, 3]),np.array([4, 0, 3]),np.array([4, 4, 3])]
+#     total_time = 40
+#     current_position = np.array([0, 0, 3])
+#     # path = LinearPath(None, None, target_pos[3], total_time, current_position)
+#     # path = CircularPath(None, None, target_pos[3], total_time, current_position)
+#     # path = MultiplePaths(None, None, target_pos, total_time, current_position)
+#     path.plot()
