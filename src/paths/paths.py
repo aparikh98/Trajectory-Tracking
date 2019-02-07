@@ -193,6 +193,7 @@ class MotionPath:
 
             # we said you shouldn't simply take a finite difference when creating
             # the path, why do you think we're doing that here?
+            print(theta_t, theta_t_1)
             point.positions = theta_t
             point.velocities = (theta_t - theta_t_1) / delta_t
             point.accelerations = (theta_t - 2*theta_t_1 + theta_t_2) / (2*delta_t)
@@ -331,10 +332,10 @@ class CircularPath(MotionPath):
         #TODO: figure out how to get this stuff
         self.current_position = current_position
         self.goal = tag_pos
-        self.radius = utils.length(self.current_position - self.goal)
+        self.radius = np.sqrt(utils.length(self.current_position - self.goal))
         self.circumference = 2 * math.pi * self.radius
         self.theta_0 = np.arctan((self.current_position[0]-self.goal[0])/(self.current_position[1]-self.goal[1]))
-        print(self.theta_0)
+        print(self.radius)
 
     def angular_kinematics(self, time):
 
@@ -373,7 +374,9 @@ class CircularPath(MotionPath):
         """
         alpha, omega, theta = self.angular_kinematics(time)
 
-        position = self.radius * np.array([np.cos(theta), np.sin(theta), 0]) - self.goal
+        position = self.radius * np.array([np.cos(theta), np.sin(theta), self.current_position[2]]) - self.goal
+        position[0] = -1 * position[0]
+        position[1] = -1 * position[1]
 
         return position
 
@@ -396,6 +399,9 @@ class CircularPath(MotionPath):
         alpha, omega, theta = self.angular_kinematics(time)
 
         velocity = self.radius * omega * np.array([-np.sin(theta), np.cos(theta), 0])
+        velocity[0] = -1 * velocity[0]
+        velocity[1] = -1 * velocity[1]
+
 
         return velocity
 
@@ -418,6 +424,8 @@ class CircularPath(MotionPath):
         alpha, omega, theta = self.angular_kinematics(time)
 
         acceleration = -self.radius * (omega ** 2) * np.array([np.cos(theta), np.sin(theta), 0])
+        acceleration[0] = -1 * acceleration[0]
+        acceleration[1] = -1 * acceleration[1]
 
         return acceleration
 

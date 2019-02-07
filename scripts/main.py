@@ -19,6 +19,7 @@ from controllers.controllers import (
 )
 from utils.utils import *
 from path_planner import PathPlanner
+from baxter_pykdl import baxter_kinematics
 
 try:
     import rospy
@@ -26,7 +27,6 @@ try:
     import baxter_interface
     import moveit_commander
     from moveit_msgs.msg import DisplayTrajectory, RobotState
-    from baxter_pykdl import baxter_kinematics
 except:
     print 'Couldn\'t import ROS, I assume you\'re working on just the paths on your own computer'
 
@@ -45,23 +45,24 @@ def lookup_tag(tag_number):
     3x' :obj:`numpy.ndarray`
         tag position
     """
-    listener = tf.TransformListener()
-    from_frame = 'left_hand_camera'
-    to_frame = 'ar_marker_{}'.format(tag_number)
+    return [np.array([0.60, 0.19, 0.26881026])]
+    # listener = tf.TransformListener()
+    # from_frame = 'base'
+    # to_frame = 'ar_marker_{}'.format(tag_number)
 
-    r = rospy.Rate(200)
-    while (
-        not listener.frameExists(from_frame) or not listener.frameExists(to_frame) 
-        # not listener.waitForTransform(from_frame, to_frame, rospy.Time(), rospy.Duration(0.1))
-    ) and (
-        not rospy.is_shutdown()
-    ):
-        print 'Cannot find AR marker {}, retrying'.format(tag_number)
-        r.sleep()
+    # r = rospy.Rate(200)
+    # while (
+    #     not listener.frameExists(from_frame) or not listener.frameExists(to_frame) 
+    #     # not listener.waitForTransform(from_frame, to_frame, rospy.Time(), rospy.Duration(0.1))
+    # ) and (
+    #     not rospy.is_shutdown()
+    # ):
+    #     print 'Cannot find AR marker {}, retrying'.format(tag_number)
+    #     r.sleep()
 
-    t = listener.getLatestCommonTime(from_frame, to_frame)
-    tag_pos, _ = listener.lookupTransform(from_frame, to_frame, t)
-    return vec(tag_pos)
+    # t = listener.getLatestCommonTime(from_frame, to_frame)
+    # tag_pos, _ = listener.lookupTransform(from_frame, to_frame, t)
+    # return vec(tag_pos)
 
 def get_trajectory(task, tag_pos, num_way, controller_name):
     """
@@ -82,10 +83,10 @@ def get_trajectory(task, tag_pos, num_way, controller_name):
 
     #TODO part a
     current_position = kin.forward_position_kinematics()[:3];
-    print(current_position)
+    print("Current Position", current_position)
     target_pos = tag_pos[0]
-    print(tag_pos)
-    total_time = 20;
+    print("target position", tag_pos)
+    total_time = 3;
     if task == 'line':
         target_pos[0][2] = current_position[2]; #linear path moves to a Z position above AR Tag.
         path = LinearPath(limb, kin, target_pos[0], total_time, current_position)

@@ -439,6 +439,19 @@ class PDWorkspaceVelocityController(Controller):
         target_velocity: 6x' ndarray of desired velocities
         target_acceleration: 6x' ndarray of desired accelerations
         """
+        current_position = self._kin.forward_position_kinematics()[:3]
+        current_orientation = tf.transformations.euler_from_quaternion(self._kin.forward_position_kinematics()[3:])
+        current_position.extend(current_orientation)
+
+        current_velocity = np.matmul(self._kin.jacobian(),(self._kin.forward_velocity_kinematics()))
+        e = target_position - current_position
+        d_e = target_velocity - current_velocity
+
+        d_x = desired_velocity + self.Kp * e - self.Kv * d_e
+
+
+
+        self._limb.set_joint_velocities(joint_array_to_dict(d_x, self._limb))
         raise NotImplementedError
 
 class PDJointVelocityController(Controller):
@@ -477,7 +490,17 @@ class PDJointVelocityController(Controller):
         target_velocity: 7x' :obj:`numpy.ndarray` of desired velocities
         target_acceleration: 7x' :obj:`numpy.ndarray` of desired accelerations
         """
-        raise NotImplementedError
+        current_position = self._limb.inverse_kinematics(self._kin.forward_position_kinematics()[:3], self._kin.forward_position_kinematics()[3:])
+
+        current_velocity = self._kin.forward_velocity_kinematics()
+        e = target_position - current_position
+        d_e = target_velocity - current_velocity
+
+        d_x = desired_velocity + self.Kp * e - self.Kv * d_e
+
+
+
+        self._limb.set_joint_velocities(joint_array_to_dict(d_x, self._limb))
 
 class PDJointTorqueController(Controller):
     def __init__(self, limb, kin, Kp, Kv):
