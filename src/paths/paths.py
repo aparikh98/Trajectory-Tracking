@@ -246,7 +246,7 @@ class LinearPath(MotionPath):
         self.goal = tag_pos
         self.current_position = current_position
         self.distance = self.goal - self.current_position
-        # print(self.distance)
+        print(self.distance)
     def target_position(self, time):
         """
         Returns where the arm end effector should be at time t
@@ -312,7 +312,7 @@ class LinearPath(MotionPath):
 
             desired acceleration in workspace coordinates of the end effector
         """
-        acceleration = (self.distance * 4) / (self.total_time ** 2);
+        acceleration = (self.distance * 4.0) / (self.total_time * self.total_time);
         if time <= self.total_time / 2.0:
             return acceleration
         else:
@@ -470,7 +470,8 @@ class MultiplePaths(MotionPath):
             paths[2] = paths[3]
             paths[3] = temp
         self.paths = paths
-        print(self.paths)
+        print("current_position", current_position)
+        print("path", self.paths)
         self.trajectories = []
         self.timePerPath = total_time/self.numpaths;
         self.trajectories.append(LinearPath(limb, kin, paths[0], self.timePerPath, current_position))
@@ -482,6 +483,7 @@ class MultiplePaths(MotionPath):
         curpath = min((int)(time/(self.total_time) * self.numpaths), self.numpaths-1)
         time_on_path = time - (curpath * self.timePerPath)
         return curpath, time_on_path
+
     def target_position(self, time):
         """
         Returns where the arm end effector should be at time t
@@ -533,12 +535,78 @@ class MultiplePaths(MotionPath):
         current_path, time_on_path = self.get_current_path(time)
         return self.trajectories[current_path].target_acceleration(time_on_path)
 
+    # def plot(self, num=300):
+        times = np.linspace(0, self.total_time, num=num)
+        target_positions = np.vstack([self.target_position(t) for t in times])
+        target_velocities = np.vstack([self.target_velocity(t) for t in times])
+        target_acceleration = np.vstack([self.target_acceleration(t) for t in times])
+        current_path =[self.get_current_path(t)[0] for t in times]
+        current_time =[self.get_current_path(t)[1] for t in times]
+
+
+        plt.figure()
+        plt.subplot(3,4,1)
+        plt.plot(times, target_positions[:,0], label='Desired')
+        plt.xlabel("Time (t)")
+        plt.ylabel("X Position")
+
+        plt.subplot(3,4,2)
+        plt.plot(times, target_velocities[:,0], label='Desired')
+        plt.xlabel("Time (t)")
+        plt.ylabel("X Velocity")
+
+        plt.subplot(3,4,3)
+        plt.plot(times, target_acceleration[:,0], label='Desired')
+        plt.xlabel("time (t)")
+        plt.ylabel("x acceleration")
+
+        plt.subplot(3,4,4)
+        plt.plot(times, target_positions[:,1], label='Desired')
+        plt.xlabel("time (t)")
+        plt.ylabel("Y Position")
+
+        plt.subplot(3,4,5)
+        plt.plot(times, target_velocities[:,1], label='Desired')
+        plt.xlabel("Time (t)")
+        plt.ylabel("Y Velocity")
+
+        plt.subplot(3,4,6)
+        plt.plot(times, target_acceleration[:,1], label='Desired')
+        plt.xlabel("Time (t)")
+        plt.ylabel("y acceleration")
+
+        plt.subplot(3,4,7)
+        plt.plot(times, target_positions[:,2], label='Desired')
+        plt.xlabel("time (t)")
+        plt.ylabel("Z Position")
+
+        plt.subplot(3,4,8)
+        plt.plot(times, target_velocities[:,2], label='Desired')
+        plt.xlabel("Time (t)")
+        plt.ylabel("Z Velocity")
+
+        plt.subplot(3,4,9)
+        plt.plot(times, target_acceleration[:,2], label='Desired')
+        plt.xlabel("Time (t)")
+        plt.ylabel("z acceleration")
+
+        plt.subplot(3,4,10)
+        plt.plot(times, current_path[:], label='Desired')
+        plt.xlabel("Time (t)")
+        plt.ylabel("current_path")
+        plt.subplot(3,4,11)
+        plt.plot(times, current_time[:], label='Desired')
+        plt.xlabel("Time (t)")
+        plt.ylabel("current time")
+
+
+        plt.show()
 
 # if __name__ == "__main__":
-#     target_pos = [np.array([0, 0, 3]),np.array([0, 4, 3]),np.array([4, 0, 3]),np.array([-0.3, 0.3, 0])]
+#     target_pos = [np.array([0, 0, 3]),np.array([0, 4, 3]),np.array([4, 0, 3]),np.array([-0.3, 0.3, 3])]
 #     total_time = 40
-#     current_position = np.array([0.53, 0.54, 0])
-#     # path = LinearPath(None, None, target_pos[3], total_time, current_position)
-#     path = CircularPath(None, None, target_pos[3], total_time, current_position)
-#     # path = MultiplePaths(None, None, target_pos, total_time, current_position)
+#     current_position = np.array([0.53, 0.54, 3])
+#     # path = LinearPath(None, None, target_pos[2], total_time, target_pos[1])
+#     # path = CircularPath(None, None, target_pos[3], total_time, current_position)
+#     path = MultiplePaths(None, None, target_pos, total_time, current_position)
 #     path.plot()

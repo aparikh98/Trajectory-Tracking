@@ -204,9 +204,9 @@ class Controller:
         for i in range(len(times)):
             positions_dict = joint_array_to_dict(actual_positions[i], self._limb)
             actual_workspace_positions[i] = \
-                self._kin.forward_position_kinematics(joint_values=positions_dict)[:3]
+                self._kin.forward_position_kinematics()[:3]
             actual_workspace_velocities[i] = \
-                self._kin.jacobian(joint_values=positions_dict)[:3].dot(actual_velocities[i])
+                self._kin.jacobian()[:3].dot(actual_velocities[i])
         # check if joint space
         if target_positions.shape[1] > 3:
             # it's joint space
@@ -217,9 +217,9 @@ class Controller:
             for i in range(len(times)):
                 positions_dict = joint_array_to_dict(target_positions[i], self._limb)
                 target_workspace_positions[i] = \
-                    self._kin.forward_position_kinematics(joint_values=positions_dict)[:3]
+                    self._kin.forward_position_kinematics()[:3]
                 target_workspace_velocities[i] = \
-                    self._kin.jacobian(joint_values=positions_dict)[:3].dot(target_velocities[i])
+                    self._kin.jacobian()[:3].dot(target_velocities[i])
 
             # Plot joint space
             plt.figure()
@@ -382,7 +382,73 @@ class Controller:
         bool
             whether the controller completes the path or not
         """
-        raise NotImplementedError
+
+
+        
+        #from execute_path
+        # if log:
+        #     times = list()
+        #     actual_positions = list()
+        #     actual_velocities = list()
+        #     target_positions = list()
+        #     target_velocities = list()
+
+        # # For interpolation
+        # max_index = len(path.joint_trajectory.points)-1
+        # current_index = 0
+
+        # # For timing
+        # start_t = rospy.Time.now()
+        # r = rospy.Rate(rate)
+
+        # while not rospy.is_shutdown():
+        #     # Find the time from start
+        #     t = (rospy.Time.now() - start_t).to_sec()
+
+        #     # If the controller has timed out, stop moving and return false
+        #     if timeout is not None and t >= timeout:
+        #         # Set velocities to zero
+        #         self.stop_moving()
+        #         return False
+
+        #     current_position = get_joint_positions(self._limb)
+        #     current_velocity = get_joint_velocities(self._limb)
+
+        #     # Get the desired position, velocity, and effort
+        #     (
+        #         target_position, 
+        #         target_velocity, 
+        #         target_acceleration, 
+        #         current_index
+        #     ) = self.interpolate_path(path, t, current_index)
+
+        #     # For plotting
+        #     if log:
+        #         times.append(t)
+        #         actual_positions.append(current_position)
+        #         actual_velocities.append(current_velocity)
+        #         target_positions.append(target_position)
+        #         target_velocities.append(target_velocity)
+
+        #     # Run controller
+        #     self.step_control(target_position, target_velocity, target_acceleration)
+
+        #     # Sleep for a bit (to let robot move)
+        #     r.sleep()
+
+        #     if current_index >= max_index:
+        #         self.stop_moving()
+        #         break
+
+        # if log:
+        #     self.plot_results(
+        #         times,
+        #         actual_positions, 
+        #         actual_velocities, 
+        #         target_positions, 
+        #         target_velocities
+        #     )
+        # return True
 
 class FeedforwardJointVelocityController(Controller):
     def step_control(self, target_position, target_velocity, target_acceleration):
@@ -440,19 +506,23 @@ class PDWorkspaceVelocityController(Controller):
         target_acceleration: 6x' ndarray of desired accelerations
         """
         current_position = self._kin.forward_position_kinematics()[:3]
-        current_orientation = tf.transformations.euler_from_quaternion(self._kin.forward_position_kinematics()[3:])
-        current_position.extend(current_orientation)
+        current_orientation = np.asarray(tf.transformations.euler_from_quaternion(self._kin.forward_position_kinematics()[3:]))
+        # current_position = get_joint_positions(self._limb)
+        current_position = np.concatenate((current_position,current_orientation))
+        # target_position = np.concatenate((target_position, np.array([0,0,0])))
+        # print(self._kin.forward_velocity_kinematics(), type(self._kin.forward_velocity_kinematics()))
 
-        current_velocity = np.matmul(self._kin.jacobian(),(self._kin.forward_velocity_kinematics()))
-        e = target_position - current_position
-        d_e = target_velocity - current_velocity
+        current_velocity = np.matmul(self._kin.jacobian(), get_joint_velocities(self._limb))
+        # current_velocity = np.concatenate((current_velocity, np.array([0,0,0])))
 
-        d_x = desired_velocity + self.Kp * e - self.Kv * d_e
+        e = current_position- target_position 
+        d_e = current_velocity- target_velocity 
+
+        d_x = target_velocity - self.Kp * e - self.Kv * d_e
+        d_q = np.matmul(self._kin.jacobian_psuedo_inverse(), d_x)
 
 
-
-        self._limb.set_joint_velocities(joint_array_to_dict(d_x, self._limb))
-        raise NotImplementedError
+        self._limb.set_joint_velocities(joint_array_to_dict(d_q, self._limb))
 
 class PDJointVelocityController(Controller):
     """
@@ -490,13 +560,14 @@ class PDJointVelocityController(Controller):
         target_velocity: 7x' :obj:`numpy.ndarray` of desired velocities
         target_acceleration: 7x' :obj:`numpy.ndarray` of desired accelerations
         """
-        current_position = self._limb.inverse_kinematics(self._kin.forward_position_kinematics()[:3], self._kin.forward_position_kinematics()[3:])
+        # current_position = self._limb.inverse_kinematics(self._kin.forward_position_kinematics()[:3], self._kin.forward_position_kinematics()[3:])
+        current_position = get_joint_positions(self._limb)
+        current_velocity = get_joint_velocities(self._limb)
+        # current_velocity = self._kin.forward_velocity_kinematics()
+        e = current_position - target_position 
+        d_e = current_velocity- target_velocity 
 
-        current_velocity = self._kin.forward_velocity_kinematics()
-        e = target_position - current_position
-        d_e = target_velocity - current_velocity
-
-        d_x = desired_velocity + self.Kp * e - self.Kv * d_e
+        d_x = target_velocity - self.Kp * e - self.Kv * d_e
 
 
 
@@ -533,8 +604,14 @@ class PDJointTorqueController(Controller):
         target_velocity: 7x' :obj:`numpy.ndarray` of desired velocities
         target_acceleration: 7x' :obj:`numpy.ndarray` of desired accelerations
         """
-        raise NotImplementedError
-
+        current_position = get_joint_positions(self._limb)
+        current_velocity = get_joint_velocities(self._limb)
+        # current_velocity = self._kin.forward_velocity_kinematics()
+        e = current_position - target_position 
+        d_e = current_velocity- target_velocity
+        torque = self._limb.inertia() * target_acceleration + self._limb.coriolis()*target_velocity  + self._limb.inertia() * (- self.Kv*d_e - self.Kp*e)
+        # torque = -self.Kp*e - self.Kv*d_e
+        self._limb.set_joint_torques(torque,self._limb)
 
 
 
