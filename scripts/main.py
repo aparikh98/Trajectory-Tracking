@@ -45,7 +45,7 @@ def lookup_tag(tag_number):
     3x' :obj:`numpy.ndarray`
         tag position
     """
-    return [np.array([0.60, 0.19, 0.26881026])]
+    return [np.array([0.5, 0.4, 0.26881026])]
     # listener = tf.TransformListener()
     # from_frame = 'base'
     # to_frame = 'ar_marker_{}'.format(tag_number)
@@ -86,7 +86,7 @@ def get_trajectory(task, tag_pos, num_way, controller_name):
     print("Current Position", current_position)
     target_pos = tag_pos[0]
     print("target position", tag_pos)
-    total_time = 3;
+    total_time = 10;
     if task == 'line':
         target_pos[0][2] = current_position[2]; #linear path moves to a Z position above AR Tag.
         path = LinearPath(limb, kin, target_pos[0], total_time, current_position)

@@ -246,8 +246,7 @@ class LinearPath(MotionPath):
         self.goal = tag_pos
         self.current_position = current_position
         self.distance = self.goal - self.current_position
-        print(self.distance)
-
+        # print(self.distance)
     def target_position(self, time):
         """
         Returns where the arm end effector should be at time t
@@ -331,11 +330,15 @@ class CircularPath(MotionPath):
         MotionPath.__init__(self, limb, kin, total_time)
         #TODO: figure out how to get this stuff
         self.current_position = current_position
+        # print("current", self.current_position)
         self.goal = tag_pos
-        self.radius = np.sqrt(utils.length(self.current_position - self.goal))
+        # print("distance", self.current_position - self.goal)
+
+        self.radius = np.linalg.norm(self.current_position - self.goal,ord = 2)
         self.circumference = 2 * math.pi * self.radius
-        self.theta_0 = np.arctan((self.current_position[0]-self.goal[0])/(self.current_position[1]-self.goal[1]))
-        print(self.radius)
+        self.theta_0 =  np.pi - np.arctan2((self.current_position[1] - self.goal[1]),(self.goal[0]-self.current_position[0]))
+        # print("radius", self.radius)
+        # print("theta 0" , self.theta_0)
 
     def angular_kinematics(self, time):
 
@@ -373,13 +376,13 @@ class CircularPath(MotionPath):
            desired x,y,z position in workspace coordinates of the end effector
         """
         alpha, omega, theta = self.angular_kinematics(time)
-
-        position = self.radius * np.array([np.cos(theta), np.sin(theta), self.current_position[2]]) - self.goal
-        position[0] = -1 * position[0]
-        position[1] = -1 * position[1]
+        theta = self.theta_0 + theta
+        position = self.radius * np.array([np.cos(theta), np.sin(theta), 0]) + self.goal
+        # position[0] = -1 * position[0]
+        # position[1] = -1 * position[1]
 
         return position
-
+        # return self.angular_kinematics(time)
     def target_velocity(self, time):
         """
         Returns the arm's desired velocity in workspace coordinates
@@ -397,10 +400,9 @@ class CircularPath(MotionPath):
         """
 
         alpha, omega, theta = self.angular_kinematics(time)
-
         velocity = self.radius * omega * np.array([-np.sin(theta), np.cos(theta), 0])
-        velocity[0] = -1 * velocity[0]
-        velocity[1] = -1 * velocity[1]
+        # velocity[0] = -1 * velocity[0]
+        # velocity[1] = -1 * velocity[1]
 
 
         return velocity
@@ -422,12 +424,27 @@ class CircularPath(MotionPath):
         """
 
         alpha, omega, theta = self.angular_kinematics(time)
-
         acceleration = -self.radius * (omega ** 2) * np.array([np.cos(theta), np.sin(theta), 0])
-        acceleration[0] = -1 * acceleration[0]
-        acceleration[1] = -1 * acceleration[1]
+        # acceleration[0] = -1 * acceleration[0]
+        # acceleration[1] = -1 * acceleration[1]
 
         return acceleration
+
+    def plot(self, num=300):
+    	MotionPath.plot(self)
+        times = np.linspace(0, self.total_time, num=num)
+        target_positions = np.vstack([self.target_position(t) for t in times])
+        target_velocities = np.vstack([self.target_velocity(t) for t in times])
+        target_acceleration = np.vstack([self.target_acceleration(t) for t in times])
+
+        plt.plot(target_positions[:,0], target_positions[:,1], label='Desired')
+        plt.scatter(target_positions[0,0], target_positions[0,1], marker='o')
+        plt.scatter(self.goal[0], self.goal[1], marker='*')
+        plt.scatter(self.current_position[0], self.current_position[1], marker='s')
+
+        plt.xlabel("x")
+        plt.ylabel("y")
+        plt.show()
 
 class MultiplePaths(MotionPath):
     """
@@ -517,12 +534,11 @@ class MultiplePaths(MotionPath):
         return self.trajectories[current_path].target_acceleration(time_on_path)
 
 
-#use to test paths
 # if __name__ == "__main__":
-#     target_pos = [np.array([0, 0, 3]),np.array([0, 4, 3]),np.array([4, 0, 3]),np.array([4, 4, 3])]
+#     target_pos = [np.array([0, 0, 3]),np.array([0, 4, 3]),np.array([4, 0, 3]),np.array([-0.3, 0.3, 0])]
 #     total_time = 40
-#     current_position = np.array([0, 0, 3])
+#     current_position = np.array([0.53, 0.54, 0])
 #     # path = LinearPath(None, None, target_pos[3], total_time, current_position)
-#     # path = CircularPath(None, None, target_pos[3], total_time, current_position)
+#     path = CircularPath(None, None, target_pos[3], total_time, current_position)
 #     # path = MultiplePaths(None, None, target_pos, total_time, current_position)
 #     path.plot()
