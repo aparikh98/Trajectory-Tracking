@@ -171,7 +171,9 @@ class Controller:
         actual_positions, 
         actual_velocities, 
         target_positions, 
-        target_velocities
+        target_velocities,
+        # actual_positions_workspace,
+        # actual_velocities_workspace,
     ):
         """
         Plots results.
@@ -194,9 +196,10 @@ class Controller:
         times = np.array(times)
         actual_positions = np.array(actual_positions)
         actual_velocities = np.array(actual_velocities)
+        # actual_positions_workspace = np.array(actual_positions_workspace)
+        # actual_velocities_workspace = np.array(actual_velocities_workspace)
         target_positions = np.array(target_positions)
         target_velocities = np.array(target_velocities)
-
         # Find the actual workspace positions and velocities
         actual_workspace_positions = np.zeros((len(times), 3))
         actual_workspace_velocities = np.zeros((len(times), 3))
@@ -257,8 +260,8 @@ class Controller:
             plt.ylabel(workspace_joints[joint] + " Position Error")
 
             plt.subplot(joint_num,2,2*joint+2)
-            plt.plot(times, actual_velocities[:,joint], label='Actual')
-            plt.plot(times, target_velocities[:,joint], label='Desired')
+            plt.plot(times, actual_workspace_velocities[:,joint], label='Actual')
+            plt.plot(times, target_workspace_velocities[:,joint], label='Desired')
             plt.xlabel("Time (t)")
             plt.ylabel(workspace_joints[joint] + " Velocity Error")
 
@@ -299,6 +302,8 @@ class Controller:
             actual_velocities = list()
             target_positions = list()
             target_velocities = list()
+            # actual_positions_workspace = list()
+            # actual_velocities_workspace = list()
 
         # For interpolation
         max_index = len(path.joint_trajectory.points)-1
@@ -320,7 +325,8 @@ class Controller:
 
             current_position = get_joint_positions(self._limb)
             current_velocity = get_joint_velocities(self._limb)
-
+            # current_position_workspace = self._limb.forward_position_kinematics()
+            # current_velocity_workspace = self._limb.forward_velocity_kinematics()
             # Get the desired position, velocity, and effort
             (
                 target_position, 
@@ -336,6 +342,9 @@ class Controller:
                 actual_velocities.append(current_velocity)
                 target_positions.append(target_position)
                 target_velocities.append(target_velocity)
+                # actual_positions_workspace.append(current_position_workspace)
+                # actual_velocities_workspace.append(current_velocity_workspace)
+
 
             # Run controller
             self.step_control(target_position, target_velocity, target_acceleration)
@@ -353,7 +362,9 @@ class Controller:
                 actual_positions, 
                 actual_velocities, 
                 target_positions, 
-                target_velocities
+                target_velocities,
+                # actual_positions_workspace,
+                # actual_velocities_workspace
             )
         return True
 
@@ -508,20 +519,19 @@ class PDWorkspaceVelocityController(Controller):
         current_position = self._kin.forward_position_kinematics()[:3]
         current_orientation = np.asarray(tf.transformations.euler_from_quaternion(self._kin.forward_position_kinematics()[3:]))
         # current_position = get_joint_positions(self._limb)
-        current_position = np.concatenate((current_position,current_orientation))
-        # target_position = np.concatenate((target_position, np.array([0,0,0])))
+        current_position = np.concatenate((current_position,current_orientation)).flatten()
+        target_position = np.concatenate((target_position, np.array([0,0,0]))).flatten()
         # print(self._kin.forward_velocity_kinematics(), type(self._kin.forward_velocity_kinematics()))
 
-        current_velocity = np.matmul(self._kin.jacobian(), get_joint_velocities(self._limb))
+        current_velocity = np.array(np.matmul(self._kin.jacobian(), get_joint_velocities(self._limb))).reshape(-1)
         # current_velocity = np.concatenate((current_velocity, np.array([0,0,0])))
+        target_velocity = np.concatenate((target_velocity, np.array([0,0,0]))).flatten()
 
         e = current_position- target_position 
         d_e = current_velocity- target_velocity 
-
-        d_x = target_velocity - self.Kp * e - self.Kv * d_e
-        d_q = np.matmul(self._kin.jacobian_psuedo_inverse(), d_x)
-
-
+        d_x = target_velocity - np.matmul(self.Kp, e) - np.matmul(self.Kv, d_e)
+        d_q = np.array(np.matmul(self._kin.jacobian_pseudo_inverse(), d_x)).reshape(-1)
+        # print(joint_array_to_dict(d_q, self._limb))
         self._limb.set_joint_velocities(joint_array_to_dict(d_q, self._limb))
 
 class PDJointVelocityController(Controller):
@@ -567,8 +577,7 @@ class PDJointVelocityController(Controller):
         e = current_position - target_position 
         d_e = current_velocity- target_velocity 
 
-        d_x = target_velocity - self.Kp * e - self.Kv * d_e
-
+        d_x = target_velocity - np.matmul(self.Kp, e) - np.matmul(self.Kv, d_e)
 
 
         self._limb.set_joint_velocities(joint_array_to_dict(d_x, self._limb))
@@ -606,10 +615,22 @@ class PDJointTorqueController(Controller):
         """
         current_position = get_joint_positions(self._limb)
         current_velocity = get_joint_velocities(self._limb)
+
         # current_velocity = self._kin.forward_velocity_kinematics()
         e = current_position - target_position 
         d_e = current_velocity- target_velocity
-        torque = self._limb.inertia() * target_acceleration + self._limb.coriolis()*target_velocity  + self._limb.inertia() * (- self.Kv*d_e - self.Kp*e)
+        inertia = self._kin.inertia()
+        coriolis = vec(self._kin.coriolis()[0][0])
+        # np.asarray(self._kin.coriolis()[0][0]).reshape(-1)
+        # coriolis = np.asarray(np.asarray(coriolis)[0])
+        # print(np.shape(coriolis))
+        # print(coriolis[0])
+        print(coriolis)
+        print(type(coriolis))
+
+        torque = np.matmul(inertia, target_acceleration) +\
+            coriolis +\
+            np.matmul(inertia, (- np.matmul(self.Kv,d_e) - np.matmul(self.Kp,e)))
         # torque = -self.Kp*e - self.Kv*d_e
         self._limb.set_joint_torques(torque,self._limb)
 

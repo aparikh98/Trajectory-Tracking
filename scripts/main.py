@@ -46,7 +46,7 @@ def lookup_tag(tag_number):
         tag position
 
     """
-    return [np.array([0.7, 0.4, 0.16])]
+    return [np.array([0.6, 0.3, 0.11])]
     # return [np.array([0.6, 0.3, 0.16881026]), np.array([0.5, 0.3, 0.16881026]), np.array([0.5, 0.2, 0.16881026]), np.array([0.6, 0.2, 0.16881026])]
     # listener = tf.TransformListener()
     # from_frame = 'base'
@@ -118,13 +118,13 @@ def get_controller(controller_name):
     """
     if controller_name == 'workspace':
         # YOUR CODE HERE
-        Kp = np.array([1,1,1,1,1, 1])
-        Kv = np.array([0,0, 0, 0,0,0])
+        Kp = 5 * np.array([2,1,1,0.01,0.01, 0.01])
+        Kv = 0.3 * np.array([1,1, 1, 1,1,1])
         controller = PDWorkspaceVelocityController(limb, kin, Kp, Kv)
     elif controller_name == 'jointspace':
         # YOUR CODE HERE
-        Kp = np.array([1, 1,1,1,1,1, 1])
-        Kv = np.array([0,0,0, 0, 0,0,0])
+        Kp = 3* np.array([1, 1,1,1,1,1, 1])
+        Kv = 0.0001 * np.array([1,1, 1, 1,1,1,1])
         controller = PDJointVelocityController(limb, kin, Kp, Kv)
     elif controller_name == 'torque':
         # YOUR CODE HERE
