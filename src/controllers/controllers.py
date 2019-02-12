@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 
 # Lab imports
 from utils.utils import *
+from paths.paths import LinearPath, CircularPath, MultiplePaths, ARPath
 
 # ROS imports
 try:
@@ -207,7 +208,7 @@ class Controller:
         for i in range(len(times)):
             positions_dict = joint_array_to_dict(actual_positions[i], self._limb)
             actual_workspace_positions[i] = \
-                self._kin.forward_position_kinematics()[:3]
+                self._kin.forward_position_kinematics(positions_dict)[:3]
             actual_workspace_velocities[i] = \
                 self._kin.jacobian()[:3].dot(actual_velocities[i])
         # check if joint space
@@ -367,6 +368,41 @@ class Controller:
                 # actual_velocities_workspace
             )
         return True
+    def lookup_tag(tag_number):
+        """
+        Given an AR tag number, this returns the position of the AR tag in the robot's base frame.
+        You can use either this function or try starting the scripts/tag_pub.py script.  More info
+        about that script is in that file.
+
+        Parameters
+        ----------
+        tag_number : int
+
+        Returns
+        -------
+        3x' :obj:`numpy.ndarray`
+            tag position
+
+        """
+        listener = tf.TransformListener()
+        rospy.sleep(1)
+        from_frame = 'base'
+        to_frame = 'ar_marker_{}'.format(tag_number)
+
+        r = rospy.Rate(200)
+        while (
+            not listener.frameExists(from_frame) or not listener.frameExists(to_frame) 
+            # not listener.waitForTransform(from_frame, to_frame, rospy.Time(), rospy.Duration(0.1))
+        ) and (
+            not rospy.is_shutdown()
+        ):
+            print 'Cannot find AR marker {}, retrying'.format(tag_number)
+            r.sleep()
+
+        t = listener.getLatestCommonTime(from_frame, to_frame)
+        tag_pos, _ = listener.lookupTransform(from_frame, to_frame, t)
+        return tag_pos
+
 
     def follow_ar_tag(self, tag, rate=200, timeout=None, log=False):
         """
@@ -393,73 +429,82 @@ class Controller:
         bool
             whether the controller completes the path or not
         """
-
-
         
         #from execute_path
-        # if log:
-        #     times = list()
-        #     actual_positions = list()
-        #     actual_velocities = list()
-        #     target_positions = list()
-        #     target_velocities = list()
+        if log:
+            times = list()
+            actual_positions = list()
+            actual_velocities = list()
+            target_positions = list()
+            target_velocities = list()
 
-        # # For interpolation
-        # max_index = len(path.joint_trajectory.points)-1
-        # current_index = 0
+        # For interpolation
+        max_index = len(path.joint_trajectory.points)-1
+        current_index = 0
 
-        # # For timing
-        # start_t = rospy.Time.now()
-        # r = rospy.Rate(rate)
+        # For timing
+        start_t = rospy.Time.now()
+        r = rospy.Rate(rate)
+        latest_path = self.lookup_tag(tag)
 
-        # while not rospy.is_shutdown():
-        #     # Find the time from start
-        #     t = (rospy.Time.now() - start_t).to_sec()
+        while not rospy.is_shutdown():
+            # Find the time from start
+            t = (rospy.Time.now() - start_t).to_sec()
 
-        #     # If the controller has timed out, stop moving and return false
-        #     if timeout is not None and t >= timeout:
-        #         # Set velocities to zero
-        #         self.stop_moving()
-        #         return False
+            # If the controller has timed out, stop moving and return false
+            if timeout is not None and t >= timeout:
+                # Set velocities to zero
+                self.stop_moving()
+                return False
+            new_path = self.lookup_tag(tag)
 
-        #     current_position = get_joint_positions(self._limb)
-        #     current_velocity = get_joint_velocities(self._limb)
+            if (length(new_path - latest_path) > 0.05):
+                time_left = self.path.total_time
+                current_position_workspace = self._kin.forward_position_kinematics()[:3]
+                current_velocity_workspace = np.array(np.matmul(self._kin.jacobian(), get_joint_velocities(self._limb))).reshape(-1)[:3]
+                self.path = LinearPath(self._limb, self._kin, new_path, current_position_workspace)
+                start_t = rospy.Time.now()
+                t = (rospy.Time.now() - start_t).to_sec()
+                latest_path = new_path
+            current_position = get_joint_positions(self._limb)
+            current_velocity = get_joint_velocities(self._limb)
 
-        #     # Get the desired position, velocity, and effort
-        #     (
-        #         target_position, 
-        #         target_velocity, 
-        #         target_acceleration, 
-        #         current_index
-        #     ) = self.interpolate_path(path, t, current_index)
 
-        #     # For plotting
-        #     if log:
-        #         times.append(t)
-        #         actual_positions.append(current_position)
-        #         actual_velocities.append(current_velocity)
-        #         target_positions.append(target_position)
-        #         target_velocities.append(target_velocity)
+            # Get the desired position, velocity, and effort
+            (
+                target_position, 
+                target_velocity, 
+                target_acceleration, 
+                current_index
+            ) = self.interpolate_path(path, t, current_index)
 
-        #     # Run controller
-        #     self.step_control(target_position, target_velocity, target_acceleration)
+            # For plotting
+            if log:
+                times.append(t)
+                actual_positions.append(current_position)
+                actual_velocities.append(current_velocity)
+                target_positions.append(target_position)
+                target_velocities.append(target_velocity)
 
-        #     # Sleep for a bit (to let robot move)
-        #     r.sleep()
+            # Run controller
+            self.step_control(target_position, target_velocity, target_acceleration)
 
-        #     if current_index >= max_index:
-        #         self.stop_moving()
-        #         break
+            # Sleep for a bit (to let robot move)
+            r.sleep()
 
-        # if log:
-        #     self.plot_results(
-        #         times,
-        #         actual_positions, 
-        #         actual_velocities, 
-        #         target_positions, 
-        #         target_velocities
-        #     )
-        # return True
+            if current_index >= max_index:
+                self.stop_moving()
+                break
+
+        if log:
+            self.plot_results(
+                times,
+                actual_positions, 
+                actual_velocities, 
+                target_positions, 
+                target_velocities
+            )
+        return True
 
 class FeedforwardJointVelocityController(Controller):
     def step_control(self, target_position, target_velocity, target_acceleration):
@@ -620,20 +665,21 @@ class PDJointTorqueController(Controller):
         e = current_position - target_position 
         d_e = current_velocity- target_velocity
         inertia = self._kin.inertia()
-        coriolis = vec(self._kin.coriolis()[0][0])
-        # np.asarray(self._kin.coriolis()[0][0]).reshape(-1)
-        # coriolis = np.asarray(np.asarray(coriolis)[0])
-        # print(np.shape(coriolis))
-        # print(coriolis[0])
-        print(coriolis)
-        print(type(coriolis))
-
-        torque = np.matmul(inertia, target_acceleration) +\
-            coriolis +\
-            np.matmul(inertia, (- np.matmul(self.Kv,d_e) - np.matmul(self.Kp,e)))
+        coriolis = self._kin.coriolis()[0][0]
+        gravity = np.array(np.matmul(self._kin.jacobian_transpose(),np.array([0,0,-0.981,0,0,0]))).reshape(-1)
+        print(gravity)
+        
+        coriolis = np.array([float(coriolis[i]) for i in range(7)])
+        torque = np.array(np.matmul(inertia, target_acceleration)).reshape(-1)
+        # torque = np.array(np.matmul(inertia, target_acceleration) +\
+            # coriolis + gravity +\
+            # np.matmul(inertia, (- np.matmul(self.Kv,d_e) - np.matmul(self.Kp,e)))).reshape(-1) 
         # torque = -self.Kp*e - self.Kv*d_e
-        self._limb.set_joint_torques(torque,self._limb)
-
+        # print(inertia, torque)
+        torque_dict = joint_array_to_dict(torque, self._limb)
+        print(torque_dict)
+        self._limb.set_joint_torques(torque_dict)
+        # raise NotImplementedError
 
 
 

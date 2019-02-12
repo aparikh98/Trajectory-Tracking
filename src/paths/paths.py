@@ -234,7 +234,7 @@ class MotionPath:
         return theta
 
 class LinearPath(MotionPath):
-    def __init__(self, limb, kin, tag_pos, total_time, current_position):
+    def __init__(self, limb, kin, tag_pos, current_position):
         """
         Remember to call the constructor of MotionPath
 
@@ -242,11 +242,16 @@ class LinearPath(MotionPath):
         ----------
         ????? You're going to have to fill these in how you see fit
         """
-        MotionPath.__init__(self, limb, kin, total_time)
+        MotionPath.__init__(self, limb, kin, 0)
         self.goal = tag_pos
         self.current_position = current_position
         self.distance = self.goal - self.current_position
+        radius = np.linalg.norm(self.current_position - self.goal,ord = 2)
+
+        self.total_time = radius * 15
+
         print(self.distance)
+
     def target_position(self, time):
         """
         Returns where the arm end effector should be at time t
@@ -319,7 +324,7 @@ class LinearPath(MotionPath):
             return -1 * acceleration
 
 class CircularPath(MotionPath):
-    def __init__(self, limb, kin, tag_pos, total_time, current_position):
+    def __init__(self, limb, kin, tag_pos, current_position):
         """
         Remember to call the constructor of MotionPath
 
@@ -327,7 +332,7 @@ class CircularPath(MotionPath):
         ----------
         ????? You're going to have to fill these in how you see fit
         """
-        MotionPath.__init__(self, limb, kin, total_time)
+        MotionPath.__init__(self, limb, kin,0)
         #TODO: figure out how to get this stuff
         self.current_position = current_position
         # print("current", self.current_position)
@@ -337,6 +342,7 @@ class CircularPath(MotionPath):
         self.radius = np.linalg.norm(self.current_position - self.goal,ord = 2)
         self.circumference = 2 * math.pi * self.radius
         self.theta_0 =  np.pi - np.arctan2((self.current_position[1] - self.goal[1]),(self.goal[0]-self.current_position[0]))
+        self.total_time = circumference * 15
         # print("radius", self.radius)
         # print("theta 0" , self.theta_0)
 
@@ -454,8 +460,8 @@ class MultiplePaths(MotionPath):
     the class was to create several different paths and pass those into the
     MultiplePaths object, which would determine when to go onto the next path.
     """
-    def __init__(self, limb, kin, paths, total_time, current_position):
-        MotionPath.__init__(self, limb, kin, total_time)
+    def __init__(self, limb, kin, paths, current_position):
+        MotionPath.__init__(self, limb, kin, total_time = 0)
         #TODO: figure out how to get this stuff
         self.numpaths = len(paths)
         if self.numpaths != 4:
@@ -474,10 +480,11 @@ class MultiplePaths(MotionPath):
         print("path", self.paths)
         self.trajectories = []
         self.timePerPath = total_time/self.numpaths;
-        self.trajectories.append(LinearPath(limb, kin, paths[0], self.timePerPath, current_position))
-        self.trajectories.append(LinearPath(limb, kin, paths[1], self.timePerPath, paths[0]))
-        self.trajectories.append(LinearPath(limb, kin, paths[2], self.timePerPath, paths[1]))
-        self.trajectories.append(LinearPath(limb, kin, paths[3], self.timePerPath, paths[2]))
+        self.trajectories.append(LinearPath(limb, kin, paths[0], current_position))
+        self.trajectories.append(LinearPath(limb, kin, paths[1], paths[0]))
+        self.trajectories.append(LinearPath(limb, kin, paths[2], paths[1]))
+        self.trajectories.append(LinearPath(limb, kin, paths[3], paths[2]))
+        self.total_time = sum(t.total_time for t in self.trajectories)
 
     def get_current_path(self, time):
         curpath = min((int)(time/(self.total_time) * self.numpaths), self.numpaths-1)
@@ -535,7 +542,7 @@ class MultiplePaths(MotionPath):
         current_path, time_on_path = self.get_current_path(time)
         return self.trajectories[current_path].target_acceleration(time_on_path)
 
-    # def plot(self, num=300):
+    def plot(self, num=300):
         times = np.linspace(0, self.total_time, num=num)
         target_positions = np.vstack([self.target_position(t) for t in times])
         target_velocities = np.vstack([self.target_velocity(t) for t in times])
@@ -602,11 +609,19 @@ class MultiplePaths(MotionPath):
 
         plt.show()
 
-# if __name__ == "__main__":
-#     target_pos = [np.array([0, 0, 3]),np.array([0, 4, 3]),np.array([4, 0, 3]),np.array([-0.3, 0.3, 3])]
-#     total_time = 40
-#     current_position = np.array([0.53, 0.54, 3])
-#     # path = LinearPath(None, None, target_pos[2], total_time, target_pos[1])
-#     # path = CircularPath(None, None, target_pos[3], total_time, current_position)
-#     path = MultiplePaths(None, None, target_pos, total_time, current_position)
-#     path.plot()
+
+
+
+
+if __name__ == "__main__":
+    # target_pos = [np.array([0, 0, 3]),np.array([0, 4, 3]),np.array([4, 0, 3]),np.array([-0.3, 0.3, 3])]
+    total_time = 10
+    current_position = np.array([0.53, 0.54, 3])
+    target_pos = np.array([0.4, 0.54, 3])
+    current_velocity = np.array([0.3, 0.4, 0])
+
+    path = LinearPath(None, None, target_pos, current_position)
+    # path = CircularPath(None, None, target_pos[3], current_position)
+    # path = MultiplePaths(None, None, target_pos, current_position)
+
+    path.plot()
