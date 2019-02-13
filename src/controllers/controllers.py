@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 # Lab imports
 from utils.utils import *
-from paths.paths import LinearPath, CircularPath, MultiplePaths, ARPath
+from paths.paths import LinearPath, CircularPath, MultiplePaths
 
 # ROS imports
 try:
@@ -228,13 +228,14 @@ class Controller:
             # Plot joint space
             plt.figure()
             # print len(times), actual_positions.shape()
+            jointnames = self._limb.joint_names()
             joint_num = len(self._limb.joint_names())
             for joint in range(joint_num):
                 plt.subplot(joint_num,2,2*joint+1)
                 plt.plot(times, actual_positions[:,joint], label='Actual')
                 plt.plot(times, target_positions[:,joint], label='Desired')
                 plt.xlabel("Time (t)")
-                plt.ylabel("Joint " + str(joint) + " Position Error")
+                plt.ylabel("Joint " + jointnames[joint] + " Position Error")
 
                 plt.subplot(joint_num,2,2*joint+2)
                 plt.plot(times, actual_velocities[:,joint], label='Actual')
@@ -368,7 +369,7 @@ class Controller:
                 # actual_velocities_workspace
             )
         return True
-    def lookup_tag(tag_number):
+    def lookup_tag(self, tag_number, listener):
         """
         Given an AR tag number, this returns the position of the AR tag in the robot's base frame.
         You can use either this function or try starting the scripts/tag_pub.py script.  More info
@@ -384,8 +385,6 @@ class Controller:
             tag position
 
         """
-        listener = tf.TransformListener()
-        rospy.sleep(1)
         from_frame = 'base'
         to_frame = 'ar_marker_{}'.format(tag_number)
 
@@ -401,10 +400,11 @@ class Controller:
 
         t = listener.getLatestCommonTime(from_frame, to_frame)
         tag_pos, _ = listener.lookupTransform(from_frame, to_frame, t)
+        print("GETTING AR TAG", tag_pos)
         return tag_pos
 
 
-    def follow_ar_tag(self, tag, rate=200, timeout=None, log=False):
+    def follow_ar_tag(self, path, tag, rate=200, timeout=None, log=False):
         """
         takes in an AR tag number and follows it with the baxter's arm.  You 
         should look at execute_path() for inspiration on how to write this. 
@@ -431,6 +431,8 @@ class Controller:
         """
         
         #from execute_path
+        listener = tf.TransformListener()
+        rospy.sleep(1)
         if log:
             times = list()
             actual_positions = list()
@@ -439,33 +441,33 @@ class Controller:
             target_velocities = list()
 
         # For interpolation
-        max_index = len(path.joint_trajectory.points)-1
+        max_index = 10000
         current_index = 0
 
         # For timing
         start_t = rospy.Time.now()
         r = rospy.Rate(rate)
-        latest_path = self.lookup_tag(tag)
+        latest_path = self.lookup_tag(tag, listener)
 
         while not rospy.is_shutdown():
             # Find the time from start
             t = (rospy.Time.now() - start_t).to_sec()
-
             # If the controller has timed out, stop moving and return false
             if timeout is not None and t >= timeout:
                 # Set velocities to zero
                 self.stop_moving()
                 return False
-            new_path = self.lookup_tag(tag)
-
-            if (length(new_path - latest_path) > 0.05):
-                time_left = self.path.total_time
+            if (t > 6):
+                new_path = self.lookup_tag(tag, listener)
                 current_position_workspace = self._kin.forward_position_kinematics()[:3]
+                new_path[2] = current_position_workspace[2]
                 current_velocity_workspace = np.array(np.matmul(self._kin.jacobian(), get_joint_velocities(self._limb))).reshape(-1)[:3]
-                self.path = LinearPath(self._limb, self._kin, new_path, current_position_workspace)
+                path = LinearPath(self._limb, self._kin, new_path, current_position_workspace).to_robot_trajectory(300, True)
+
                 start_t = rospy.Time.now()
                 t = (rospy.Time.now() - start_t).to_sec()
                 latest_path = new_path
+                print ("NEW PATH FOUND!!!!!!\n\n\n")
             current_position = get_joint_positions(self._limb)
             current_velocity = get_joint_velocities(self._limb)
 
@@ -660,24 +662,29 @@ class PDJointTorqueController(Controller):
         """
         current_position = get_joint_positions(self._limb)
         current_velocity = get_joint_velocities(self._limb)
-
         # current_velocity = self._kin.forward_velocity_kinematics()
         e = current_position - target_position 
         d_e = current_velocity- target_velocity
-        inertia = self._kin.inertia()
-        coriolis = self._kin.coriolis()[0][0]
-        gravity = np.array(np.matmul(self._kin.jacobian_transpose(),np.array([0,0,-0.981,0,0,0]))).reshape(-1)
-        print(gravity)
-        
+
+        positions_dict = joint_array_to_dict(current_position, self._limb)
+        velocity_dict = joint_array_to_dict(current_velocity, self._limb)
+
+        inertia = self._kin.inertia(positions_dict)
+        coriolis = self._kin.coriolis(positions_dict, velocity_dict)[0][0]
+                # gravity = np.array(np.matmul(self._kin.jacobian_transpose(positions_dict),np.array([0,0,1.52,0,0,0]))).reshape(-1)
+
+        gravity = np.array(np.matmul(self._kin.jacobian_transpose(positions_dict),np.array([0,0,0.981,0,0,0]))).reshape(-1)
         coriolis = np.array([float(coriolis[i]) for i in range(7)])
-        torque = np.array(np.matmul(inertia, target_acceleration)).reshape(-1)
-        # torque = np.array(np.matmul(inertia, target_acceleration) +\
-            # coriolis + gravity +\
-            # np.matmul(inertia, (- np.matmul(self.Kv,d_e) - np.matmul(self.Kp,e)))).reshape(-1) 
+        # torque = np.array(np.matmul(inertia, target_acceleration)).reshape(-1) + gravity
+        # torque = gravity
+        torque = np.array(np.matmul(inertia, target_acceleration) +\
+            coriolis + gravity + (-np.matmul(self.Kv,d_e) - np.matmul(self.Kp,e))).reshape(-1)
+        # ).reshape(-1) 
         # torque = -self.Kp*e - self.Kv*d_e
         # print(inertia, torque)
         torque_dict = joint_array_to_dict(torque, self._limb)
-        print(torque_dict)
+        # print(torque_dict)
+        # print(torque_dict)
         self._limb.set_joint_torques(torque_dict)
         # raise NotImplementedError
 

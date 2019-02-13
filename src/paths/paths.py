@@ -31,7 +31,8 @@ class MotionPath:
         self.limb = limb
         self.kin = kin
         self.total_time = total_time
-
+    def get_total_time(self):
+        return self.total_time
     def target_position(self, time):
         """
         Returns where the arm end effector should be at time t
@@ -193,7 +194,7 @@ class MotionPath:
 
             # we said you shouldn't simply take a finite difference when creating
             # the path, why do you think we're doing that here?
-            print(theta_t, theta_t_1)
+            # print(theta_t, theta_t_1)
             point.positions = theta_t
             point.velocities = (theta_t - theta_t_1) / delta_t
             point.accelerations = (theta_t - 2*theta_t_1 + theta_t_2) / (2*delta_t)
@@ -248,9 +249,8 @@ class LinearPath(MotionPath):
         self.distance = self.goal - self.current_position
         radius = np.linalg.norm(self.current_position - self.goal,ord = 2)
 
-        self.total_time = radius * 15
+        self.total_time = radius * 5
 
-        print(self.distance)
 
     def target_position(self, time):
         """
@@ -278,6 +278,7 @@ class LinearPath(MotionPath):
             d_remain = 1 / 2.0 * self.target_acceleration(time) * (after_half_time ** 2) + v_halfway * after_half_time
             distance = d_halfway + d_remain
             return distance
+
 
     def target_velocity(self, time):
         """
@@ -476,8 +477,8 @@ class MultiplePaths(MotionPath):
             paths[2] = paths[3]
             paths[3] = temp
         self.paths = paths
-        print("current_position", current_position)
-        print("path", self.paths)
+        # print("current_position", current_position)
+        # print("path", self.paths)
         self.trajectories = []
         self.timePerPath = total_time/self.numpaths;
         self.trajectories.append(LinearPath(limb, kin, paths[0], current_position))

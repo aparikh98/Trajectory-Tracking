@@ -46,26 +46,26 @@ def lookup_tag(tag_number):
         tag position
 
     """
-    return [np.array([0.7, 0.4, 0.11])]
+    return [np.array([0.7, 0.5, 0.11])]
     # return [np.array([0.6, 0.3, 0.16881026]), np.array([0.5, 0.3, 0.16881026]), np.array([0.5, 0.2, 0.16881026]), np.array([0.6, 0.2, 0.16881026])]
-    listener = tf.TransformListener()
-    rospy.sleep(1)
-    from_frame = 'base'
-    to_frame = 'ar_marker_{}'.format(tag_number)
+    # listener = tf.TransformListener()
+    # rospy.sleep(1)
+    # from_frame = 'base'
+    # to_frame = 'ar_marker_{}'.format(tag_number)
 
-    r = rospy.Rate(200)
-    while (
-        not listener.frameExists(from_frame) or not listener.frameExists(to_frame) 
-        # not listener.waitForTransform(from_frame, to_frame, rospy.Time(), rospy.Duration(0.1))
-    ) and (
-        not rospy.is_shutdown()
-    ):
-        print 'Cannot find AR marker {}, retrying'.format(tag_number)
-        r.sleep()
+    # r = rospy.Rate(200)
+    # while (
+    #     not listener.frameExists(from_frame) or not listener.frameExists(to_frame) 
+    #     # not listener.waitForTransform(from_frame, to_frame, rospy.Time(), rospy.Duration(0.1))
+    # ) and (
+    #     not rospy.is_shutdown()
+    # ):
+    #     print 'Cannot find AR marker {}, retrying'.format(tag_number)
+    #     r.sleep()
 
-    t = listener.getLatestCommonTime(from_frame, to_frame)
-    tag_pos, _ = listener.lookupTransform(from_frame, to_frame, t)
-    return vec(tag_pos)
+    # t = listener.getLatestCommonTime(from_frame, to_frame)
+    # tag_pos, _ = listener.lookupTransform(from_frame, to_frame, t)
+    # return vec(tag_pos)
 
 def get_trajectory(task, tag_pos, num_way, controller_name):
     """
@@ -128,8 +128,8 @@ def get_controller(controller_name):
         controller = PDJointVelocityController(limb, kin, Kp, Kv)
     elif controller_name == 'torque':
         # YOUR CODE HERE
-        Kp = 0 * np.array([1, 1,1,1,1,1, 1])
-        Kv = np.array([0,0,0, 0, 0,0,0])
+        Kp = 4 * np.array([1, 1,1,1,0,0, 0])
+        Kv = 1 * np.array([1, 1,1,1,0,0, 0])
         controller = PDJointTorqueController(limb, kin, Kp, Kv)
     elif controller_name == 'open_loop':
         controller = FeedforwardJointVelocityController(limb, kin)
@@ -152,6 +152,7 @@ if __name__ == "__main__":
 
     python scripts/main.py -t circle -c jointspace -ar 5 --log
     python scripts/main.py -t line -c jointspace -ar 5 --log
+    python scripts/main.py -t line -c torque -ar 5 --log
 
     You can also change the rate, timeout if you want
     """
@@ -257,6 +258,7 @@ if __name__ == "__main__":
             timeout=args.timeout,
             log=args.log
         )
+        # done = controller.follow_ar_tag(robot_trajectory, args.ar_marker[0], rate = args.rate, timeout = args.timeout, log = args.log)
         if not done:
             print 'Failed to move to position'
             sys.exit(0)
