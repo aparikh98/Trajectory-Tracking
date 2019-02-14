@@ -15,8 +15,9 @@ from controllers.controllers import (
     PDWorkspaceVelocityController,
     PDJointVelocityController,
     PDJointTorqueController,
-    FeedforwardJointVelocityController
-)
+    FeedforwardJointVelocityController,
+    JointspaceImpedanceController,
+    WorkspaceImpedanceController)
 from utils.utils import *
 from path_planner import PathPlanner
 from baxter_pykdl import baxter_kinematics
@@ -46,7 +47,7 @@ def lookup_tag(tag_number):
         tag position
 
     """
-    return [np.array([0.7, 0.5, 0.11])]
+    return [np.array([0.6, 0.4, 0.11])]
     # return [np.array([0.6, 0.3, 0.16881026]), np.array([0.5, 0.3, 0.16881026]), np.array([0.5, 0.2, 0.16881026]), np.array([0.6, 0.2, 0.16881026])]
     # listener = tf.TransformListener()
     # rospy.sleep(1)
@@ -102,7 +103,7 @@ def get_trajectory(task, tag_pos, num_way, controller_name):
     else:
         raise ValueError('task {} not recognized'.format(task))
     path.plot()
-    return path.to_robot_trajectory(num_way, controller_name!='workspace')
+    return path.to_robot_trajectory(num_way, controller_name!='workspace' and controller_name != 'workspace_impedance')
 
 def get_controller(controller_name):
     """
@@ -128,9 +129,24 @@ def get_controller(controller_name):
         controller = PDJointVelocityController(limb, kin, Kp, Kv)
     elif controller_name == 'torque':
         # YOUR CODE HERE
-        Kp = 4 * np.array([1, 1,1,1,0,0, 0])
-        Kv = 1 * np.array([1, 1,1,1,0,0, 0])
+        Kp = 8 * np.array([1, 1,1,1,0.5,0.5, 0.3])
+        Kv = 3 * np.array([1.5, 1.5,1,1,0.3,0.3, 0.3])
         controller = PDJointTorqueController(limb, kin, Kp, Kv)
+    elif controller_name == 'workspace_impedance':
+        # YOUR CODE HERE
+        Md = 0.01 * np.array([1, 1,1,1,1,1])
+        Bd = 0.01 * np.array([1, 1,1,1,1,1])
+        Kd = 0.01 * np.array([1, 1,1,1,1,1])
+
+        controller = WorkspaceImpedanceController(limb, kin, Md, Bd, Kd)
+    elif controller_name == 'jointspace_impedance':
+        # YOUR CODE HERE
+        Kd = 8 * np.array([1, 1,1,1,60,50, 50])
+        Bd = 3 * np.array([1.5, 1.5,1,1,20,20, 20])
+        Md = 1 * np.array([1, 1,1,1,1,1,1])
+        # Kd = 0 * np.array([1, 1,1,1,1,0,0])
+        controller = JointspaceImpedanceController(limb, kin, Md, Bd, Kd)
+
     elif controller_name == 'open_loop':
         controller = FeedforwardJointVelocityController(limb, kin)
     else:

@@ -662,31 +662,33 @@ class PDJointTorqueController(Controller):
         """
         current_position = get_joint_positions(self._limb)
         current_velocity = get_joint_velocities(self._limb)
-        # current_velocity = self._kin.forward_velocity_kinematics()
         e = current_position - target_position 
         d_e = current_velocity- target_velocity
 
         positions_dict = joint_array_to_dict(current_position, self._limb)
         velocity_dict = joint_array_to_dict(current_velocity, self._limb)
 
-        inertia = self._kin.inertia(positions_dict)
+        inertia = self._kin.inertia()
         coriolis = self._kin.coriolis(positions_dict, velocity_dict)[0][0]
-                # gravity = np.array(np.matmul(self._kin.jacobian_transpose(positions_dict),np.array([0,0,1.52,0,0,0]))).reshape(-1)
+        coriolis = np.array([float(coriolis[i]) for i in range(7)]).reshape((7,1))
 
-        gravity = np.array(np.matmul(self._kin.jacobian_transpose(positions_dict),np.array([0,0,0.981,0,0,0]))).reshape(-1)
-        coriolis = np.array([float(coriolis[i]) for i in range(7)])
-        # torque = np.array(np.matmul(inertia, target_acceleration)).reshape(-1) + gravity
+                # gravity = np.array(np.matmul(self._kin.jacobian_transpose(positions_dict),np.array([0,0,1.52,0,0,0]))).reshape(-1)
+        gravity_accel = np.array([0,0,.981,0,0,0]).reshape((6,1))
+        gravity_jointspace = (np.matmul(self._kin.jacobian_transpose(), gravity_accel))
+        gravity = (np.matmul(inertia, gravity_jointspace))
+
+        # print(gravity_workspace, gravity_workspace.shape)
+        # gravity_workspace = np.array(gravity_workspace).reshape(-1)
+        # print(gravity_workspace, gravity_workspace.shape)
+        # print(np.matmul(self._kin.jacobian_transpose(positions_dict),gravity_workspace))
+        # print(np.matmul(inertia, target_acceleration), inertia, target_acceleration)
         # torque = gravity
+        # torque = np.array(np.matmul(inertia, target_acceleration)).reshape((7,1)) + gravity + coriolis
+        # torque = np.array(np.matmul(inertia, target_acceleration)).reshape(-1) + gravity
         torque = np.array(np.matmul(inertia, target_acceleration) +\
             coriolis + gravity + (-np.matmul(self.Kv,d_e) - np.matmul(self.Kp,e))).reshape(-1)
-        # ).reshape(-1) 
-        # torque = -self.Kp*e - self.Kv*d_e
-        # print(inertia, torque)
         torque_dict = joint_array_to_dict(torque, self._limb)
-        # print(torque_dict)
-        # print(torque_dict)
         self._limb.set_joint_torques(torque_dict)
-        # raise NotImplementedError
 
 
 
@@ -699,7 +701,7 @@ class PDJointTorqueController(Controller):
 ######################
 
 class WorkspaceImpedanceController(Controller):
-    def __init__(self, limb, kin, Kp, Kv):
+    def __init__(self, limb, kin, Md, Bd, Kd):
         """
         Parameters
         ----------
@@ -709,22 +711,54 @@ class WorkspaceImpedanceController(Controller):
         Kv : 6x' :obj:`numpy.ndarray`
         """
         Controller.__init__(self, limb, kin)
-        self.Kp = np.diag(Kp)
-        self.Kv = np.diag(Kv)
+        self.Md = np.diag(Md)
+        self.Bd = np.diag(Bd)
+        self.Kd = np.diag(Kd)
 
     def step_control(self, target_position, target_velocity, target_acceleration):
         """
 
         Parameters
         ----------
-        target_position: 7x' ndarray of desired positions
-        target_velocity: 7x' ndarray of desired velocities
-        target_acceleration: 7x' ndarray of desired accelerations
+        target_position: 6x' ndarray of desired positions
+        target_velocity: 6x' ndarray of desired velocities
+        target_acceleration: 6x' ndarray of desired accelerations
         """
-        raise NotImplementedError
+        current_position = self._kin.forward_position_kinematics()[:3]
+        current_orientation = np.asarray(tf.transformations.euler_from_quaternion(self._kin.forward_position_kinematics()[3:]))
+        current_position = np.concatenate((current_position,current_orientation)).flatten()
+        target_position = np.concatenate((target_position, np.array([0,0,0]))).flatten()
 
+        current_velocity = np.array(np.matmul(self._kin.jacobian(), get_joint_velocities(self._limb))).reshape(-1)
+        target_velocity = np.concatenate((target_velocity, np.array([0,0,0]))).flatten()
+       
+        e = current_position - target_position 
+        d_e = current_velocity- target_velocity
+
+
+        inertia = self._kin.cart_inertia(positions_dict)
+
+        gravity = np.array(np.matmul(inertia, np.array([0,0,0.981,0,0,0]))).reshape((6,1))
+
+
+        current_position_js = get_joint_positions(self._limb)
+        current_velocity_js = get_joint_velocities(self._limb)
+
+        positions_dict = joint_array_to_dict(current_position_js, self._limb)
+        velocity_dict = joint_array_to_dict(current_velocity_js, self._limb)
+
+
+        feedback = np.matmul(inertia,  np.array(target_acceleration).reshape((6,1)) -\
+         np.matmul(np.linalg.inv(self.Md),\
+          (np.matmul(self.Bd, d_e) +np.matmul(self.Kd, e)).reshape((6,1))))
+
+        force =  gravity + feedback
+        torque = np.matmul(self._kin.jacobian_transpose(), force) 
+        torque_dict = joint_array_to_dict(force, self._limb)
+        self._limb.set_joint_torques(torque_dict)
+        
 class JointspaceImpedanceController(Controller):
-    def __init__(self, limb, kin, Kp, Kv):
+    def __init__(self, limb, kin, Md, Bd, Kd):
         """
         Parameters
         ----------
@@ -734,8 +768,9 @@ class JointspaceImpedanceController(Controller):
         Kv : 7x' :obj:`numpy.ndarray`
         """
         Controller.__init__(self, limb, kin)
-        self.Kp = np.diag(Kp)
-        self.Kv = np.diag(Kv)
+        self.Md = np.diag(Md)
+        self.Bd = np.diag(Bd)
+        self.Kd = np.diag(Kd)
 
     def step_control(self, target_position, target_velocity, target_acceleration):
         """
@@ -745,4 +780,28 @@ class JointspaceImpedanceController(Controller):
         target_velocity: 7x' :obj:`numpy.ndarray` of desired velocities
         target_acceleration: 7x' :obj:`numpy.ndarray` of desired accelerations
         """
-        raise NotImplementedError
+        current_position = get_joint_positions(self._limb)
+        current_velocity = get_joint_velocities(self._limb)
+
+        e = current_position - target_position 
+        d_e = current_velocity- target_velocity
+        positions_dict = joint_array_to_dict(current_position, self._limb)
+        velocity_dict = joint_array_to_dict(current_velocity, self._limb)
+
+
+        inertia = self._kin.inertia()
+        coriolis = self._kin.coriolis(positions_dict, velocity_dict)[0][0]
+        coriolis = np.array([float(coriolis[i]) for i in range(7)]).reshape((7,1))
+
+        gravity_accel = np.array([0,0,.981,0,0,0]).reshape((6,1))
+        gravity_jointspace = (np.matmul(self._kin.jacobian_transpose(), gravity_accel))
+        gravity = (np.matmul(inertia, gravity_jointspace))
+
+        feedback = (np.matmul(self.Bd, d_e) +np.matmul(self.Kd, e)).reshape((7,1))
+        feedback = np.array(target_acceleration).reshape((7,1)) - np.matmul(np.linalg.inv(self.Md),feedback)
+
+        feedback =  np.matmul(inertia,  feedback)
+
+        force = coriolis + gravity + feedback
+        torque_dict = joint_array_to_dict(force, self._limb)
+        self._limb.set_joint_torques(torque_dict)

@@ -53,7 +53,7 @@ def tag_pub(tags):
             
 if __name__ == '__main__':
     # How to run: python src/tag_pub.py -tag 4 6 3
-    #  python src/tag_pub.py -tag 4
+    #  python src/tag_pub.py -ar_marker 3
     parser = argparse.ArgumentParser()
     parser.add_argument('-ar_marker', '-ar', nargs='+', required=True, help='the tag number')
     args = parser.parse_args()

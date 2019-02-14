@@ -265,6 +265,8 @@ class LinearPath(MotionPath):
         3x' :obj:`numpy.ndarray`
             desired x,y,z position in workspace coordinates of the end effector
         """
+        # return self.current_position
+
         if time <= self.total_time / 2.0:
             distance = 1 / 2.0 * self.target_acceleration(time) * (time ** 2)
             return distance + self.current_position
@@ -295,6 +297,7 @@ class LinearPath(MotionPath):
         3x' :obj:`numpy.ndarray`
             desired velocity in workspace coordinates of the end effector
         """
+        # return np.array([0,0,0])
         if time <= self.total_time / 2.0:
             velocity = time * self.target_acceleration(time)
         else:
@@ -318,6 +321,8 @@ class LinearPath(MotionPath):
 
             desired acceleration in workspace coordinates of the end effector
         """
+        # return np.array([0,0,0])
+
         acceleration = (self.distance * 4.0) / (self.total_time * self.total_time);
         if time <= self.total_time / 2.0:
             return acceleration
@@ -343,7 +348,7 @@ class CircularPath(MotionPath):
         self.radius = np.linalg.norm(self.current_position - self.goal,ord = 2)
         self.circumference = 2 * math.pi * self.radius
         self.theta_0 =  np.pi - np.arctan2((self.current_position[1] - self.goal[1]),(self.goal[0]-self.current_position[0]))
-        self.total_time = circumference * 15
+        self.total_time = self.circumference * 5
         # print("radius", self.radius)
         # print("theta 0" , self.theta_0)
 
