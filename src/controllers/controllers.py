@@ -9,8 +9,9 @@ Author: Chris Correa, Valmik Prabhu
 import sys
 import numpy as np
 import itertools
+import matplotlib 
+# matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-
 # Lab imports
 from utils.utils import *
 from paths.paths import LinearPath, CircularPath, MultiplePaths
@@ -369,42 +370,57 @@ class Controller:
                 # actual_velocities_workspace
             )
         return True
+    # def lookup_tag(self, tag_number, listener):
+    #     """
+    #     Given an AR tag number, this returns the position of the AR tag in the robot's base frame.
+    #     You can use either this function or try starting the scripts/tag_pub.py script.  More info
+    #     about that script is in that file.
+
+    #     Parameters
+    #     ----------
+    #     tag_number : int
+
+    #     Returns
+    #     -------
+    #     3x' :obj:`numpy.ndarray`
+    #         tag position
+
+    #     """
+    #     from_frame = 'base'
+    #     to_frame = 'ar_marker_{}'.format(tag_number)
+
+    #     r = rospy.Rate(200)
+    #     while (
+    #         not listener.frameExists(from_frame) or not listener.frameExists(to_frame) 
+    #         # not listener.waitForTransform(from_frame, to_frame, rospy.Time(), rospy.Duration(0.1))
+    #     ) and (
+    #         not rospy.is_shutdown()
+    #     ):
+    #         print 'Cannot find AR marker {}, retrying'.format(tag_number)
+    #         r.sleep()
+
+    #     t = listener.getLatestCommonTime(from_frame, to_frame)
+    #     tag_pos, _ = listener.lookupTransform(from_frame, to_frame, t)
+    #     print("GETTING AR TAG", tag_pos)
+    #     return tag_pos
+
     def lookup_tag(self, tag_number, listener):
-        """
-        Given an AR tag number, this returns the position of the AR tag in the robot's base frame.
-        You can use either this function or try starting the scripts/tag_pub.py script.  More info
-        about that script is in that file.
-
-        Parameters
-        ----------
-        tag_number : int
-
-        Returns
-        -------
-        3x' :obj:`numpy.ndarray`
-            tag position
-
-        """
         from_frame = 'base'
         to_frame = 'ar_marker_{}'.format(tag_number)
-
-        r = rospy.Rate(200)
-        while (
-            not listener.frameExists(from_frame) or not listener.frameExists(to_frame) 
-            # not listener.waitForTransform(from_frame, to_frame, rospy.Time(), rospy.Duration(0.1))
-        ) and (
-            not rospy.is_shutdown()
-        ):
+        if (
+            listener.frameExists(from_frame) or not listener.frameExists(to_frame) and not rospy.is_shutdown()):
+            t = listener.getLatestCommonTime(from_frame, to_frame)
+            tag_pos, _ = listener.lookupTransform(from_frame, to_frame, t)
+            print("GETTING AR TAG", tag_pos)
+            return tag_pos
+        else:
             print 'Cannot find AR marker {}, retrying'.format(tag_number)
-            r.sleep()
-
-        t = listener.getLatestCommonTime(from_frame, to_frame)
-        tag_pos, _ = listener.lookupTransform(from_frame, to_frame, t)
-        print("GETTING AR TAG", tag_pos)
-        return tag_pos
+            return None
 
 
-    def follow_ar_tag(self, path, tag, rate=200, timeout=None, log=False):
+
+
+    def follow_ar_tag(self, path, tag, rate=200, timeout=None, log= True):
         """
         takes in an AR tag number and follows it with the baxter's arm.  You 
         should look at execute_path() for inspiration on how to write this. 
@@ -429,7 +445,7 @@ class Controller:
         bool
             whether the controller completes the path or not
         """
-        
+        timeout = 10
         #from execute_path
         listener = tf.TransformListener()
         rospy.sleep(1)
@@ -448,29 +464,33 @@ class Controller:
         start_t = rospy.Time.now()
         r = rospy.Rate(rate)
         latest_path = self.lookup_tag(tag, listener)
+        start_2 = start_t
 
         while not rospy.is_shutdown():
             # Find the time from start
             t = (rospy.Time.now() - start_t).to_sec()
+            t2 = (rospy.Time.now() - start_2).to_sec()
             # If the controller has timed out, stop moving and return false
-            if timeout is not None and t >= timeout:
+            if timeout is not None and t < timeout:
                 # Set velocities to zero
-                self.stop_moving()
-                return False
-            if (t > 6):
-                new_path = self.lookup_tag(tag, listener)
-                current_position_workspace = self._kin.forward_position_kinematics()[:3]
-                new_path[2] = current_position_workspace[2]
-                current_velocity_workspace = np.array(np.matmul(self._kin.jacobian(), get_joint_velocities(self._limb))).reshape(-1)[:3]
-                path = LinearPath(self._limb, self._kin, new_path, current_position_workspace).to_robot_trajectory(300, True)
-
-                start_t = rospy.Time.now()
-                t = (rospy.Time.now() - start_t).to_sec()
-                latest_path = new_path
-                print ("NEW PATH FOUND!!!!!!\n\n\n")
+                # self.stop_moving()
+                # return False
+                if (t2 > 4):
+                    new_path = self.lookup_tag(tag, listener)
+                    if (new_path != None):
+                        current_position_workspace = self._kin.forward_position_kinematics()[:3]
+                        new_path[2] = current_position_workspace[2]
+                        current_velocity_workspace = np.array(np.matmul(self._kin.jacobian(), get_joint_velocities(self._limb))).reshape(-1)[:3]
+                        path = LinearPath(self._limb, self._kin, new_path, current_position_workspace).to_robot_trajectory(300, True)
+                        if (path != None):
+                            current_index = 0
+                            start_2 = (rospy.Time.now())
+                            latest_path = new_path
+                            print ("NEW PATH FOUND!!!!!!\n\n\n")
+            else:
+                max_index = len(path.joint_trajectory.points)-1
             current_position = get_joint_positions(self._limb)
             current_velocity = get_joint_velocities(self._limb)
-
 
             # Get the desired position, velocity, and effort
             (
@@ -478,7 +498,7 @@ class Controller:
                 target_velocity, 
                 target_acceleration, 
                 current_index
-            ) = self.interpolate_path(path, t, current_index)
+            ) = self.interpolate_path(path, t2, current_index)
 
             # For plotting
             if log:

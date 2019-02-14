@@ -47,8 +47,8 @@ def lookup_tag(tag_number):
         tag position
 
     """
-    return [np.array([0.6, 0.4, 0.11])]
-    # return [np.array([0.6, 0.3, 0.16881026]), np.array([0.5, 0.3, 0.16881026]), np.array([0.5, 0.2, 0.16881026]), np.array([0.6, 0.2, 0.16881026])]
+    return [np.array([0.6, 0.3, 0.11])]
+    # return [np.array([0.5, 0, 0.36881026]), np.array([0.78, 0, 0.26881026]), np.array([0.78, 0.4, 0.26881026])] 
     # listener = tf.TransformListener()
     # rospy.sleep(1)
     # from_frame = 'base'
@@ -119,8 +119,8 @@ def get_controller(controller_name):
     """
     if controller_name == 'workspace':
         # YOUR CODE HERE
-        Kp = 5 * np.array([2,1,1,0.01,0.01, 0.01])
-        Kv = 0.3 * np.array([1,1, 1, 1,1,1])
+        Kp = 8* np.array([1,0.65,0.5,0.01,0.01, 0.01])
+        Kv = 0.3 * np.array([3,0.5, 1, 1,1,1])
         controller = PDWorkspaceVelocityController(limb, kin, Kp, Kv)
     elif controller_name == 'jointspace':
         # YOUR CODE HERE
@@ -169,6 +169,7 @@ if __name__ == "__main__":
     python scripts/main.py -t circle -c jointspace -ar 5 --log
     python scripts/main.py -t line -c jointspace -ar 5 --log
     python scripts/main.py -t line -c torque -ar 5 --log
+    python scripts/main.py -t line -c jointspace -ar 4 --log
 
     You can also change the rate, timeout if you want
     """
@@ -268,12 +269,14 @@ if __name__ == "__main__":
         except KeyboardInterrupt:
             sys.exit()
         # execute the path using your own controller.
+        #REGULAR EXECUTION
         done = controller.execute_path(
             robot_trajectory,
             rate=args.rate,
             timeout=args.timeout,
             log=args.log
         )
+        #AR TAG FOLLOWING:
         # done = controller.follow_ar_tag(robot_trajectory, args.ar_marker[0], rate = args.rate, timeout = args.timeout, log = args.log)
         if not done:
             print 'Failed to move to position'

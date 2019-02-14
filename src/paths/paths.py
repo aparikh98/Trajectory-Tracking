@@ -388,11 +388,10 @@ class CircularPath(MotionPath):
            desired x,y,z position in workspace coordinates of the end effector
         """
         alpha, omega, theta = self.angular_kinematics(time)
-        theta = self.theta_0 + theta
-        position = self.radius * np.array([np.cos(theta), np.sin(theta), 0]) + self.goal
+        theta =  theta + self.theta_0
+        position = self.radius * np.array([ np.cos(theta),np.sin(theta), 0]) + self.goal
         # position[0] = -1 * position[0]
         # position[1] = -1 * position[1]
-
         return position
         # return self.angular_kinematics(time)
     def target_velocity(self, time):
@@ -412,6 +411,7 @@ class CircularPath(MotionPath):
         """
 
         alpha, omega, theta = self.angular_kinematics(time)
+        theta = theta + self.theta_0
         velocity = self.radius * omega * np.array([-np.sin(theta), np.cos(theta), 0])
         # velocity[0] = -1 * velocity[0]
         # velocity[1] = -1 * velocity[1]
@@ -436,10 +436,10 @@ class CircularPath(MotionPath):
         """
 
         alpha, omega, theta = self.angular_kinematics(time)
+        theta = theta + self.theta_0         
         acceleration = -self.radius * (omega ** 2) * np.array([np.cos(theta), np.sin(theta), 0])
         # acceleration[0] = -1 * acceleration[0]
         # acceleration[1] = -1 * acceleration[1]
-
         return acceleration
 
     def plot(self, num=300):
@@ -469,32 +469,36 @@ class MultiplePaths(MotionPath):
     def __init__(self, limb, kin, paths, current_position):
         MotionPath.__init__(self, limb, kin, total_time = 0)
         #TODO: figure out how to get this stuff
-        self.numpaths = len(paths)
+        self.numpaths = len(paths)+1
         if self.numpaths != 4:
             return
-        paths = sorted(paths, key=lambda a: a[0])
-        if (paths[0][1] > paths[1][1]):
-            temp = paths[0]
-            paths[0] = paths[1]
-            paths[1] = temp
-        if (paths[2][1] < paths[3][1]):
-            temp = paths[2]
-            paths[2] = paths[3]
-            paths[3] = temp
+        # paths = sorted(paths, key=lambda a: a[0])
+        # if (paths[0][1] > paths[1][1]):
+        #     temp = paths[0]
+        #     paths[0] = paths[1]
+        #     paths[1] = temp
+        # if (paths[2][1] < paths[3][1]):
+        #     temp = paths[2]
+        #     paths[2] = paths[3]
+        #     paths[3] = temp
         self.paths = paths
-        # print("current_position", current_position)
-        # print("path", self.paths)
+        print("current_position", current_position)
+        print("path", self.paths)
         self.trajectories = []
-        self.timePerPath = total_time/self.numpaths;
         self.trajectories.append(LinearPath(limb, kin, paths[0], current_position))
         self.trajectories.append(LinearPath(limb, kin, paths[1], paths[0]))
         self.trajectories.append(LinearPath(limb, kin, paths[2], paths[1]))
-        self.trajectories.append(LinearPath(limb, kin, paths[3], paths[2]))
+        self.trajectories.append(LinearPath(limb, kin, current_position, paths[2]))
         self.total_time = sum(t.total_time for t in self.trajectories)
+        print(self.total_time)
+        self.time_on_path = [t.total_time for t in self.trajectories]
 
     def get_current_path(self, time):
         curpath = min((int)(time/(self.total_time) * self.numpaths), self.numpaths-1)
-        time_on_path = time - (curpath * self.timePerPath)
+        if curpath > 0:
+            time_on_path = time - sum(self.time_on_path[:curpath])
+        else:
+            time_on_path = time
         return curpath, time_on_path
 
     def target_position(self, time):
