@@ -590,17 +590,17 @@ class PDWorkspaceVelocityController(Controller):
         current_position = self._kin.forward_position_kinematics()[:3]
         current_orientation = np.asarray(tf.transformations.euler_from_quaternion(self._kin.forward_position_kinematics()[3:]))
         # current_position = get_joint_positions(self._limb)
-        current_position = np.concatenate((current_position,current_orientation)).flatten()
-        target_position = np.concatenate((target_position, np.array([0,0,0]))).flatten()
+        current_position = np.concatenate((current_position,current_orientation)).reshape(6,1)
+        target_position = np.concatenate((target_position, np.array([np.pi,0,np.pi]))).reshape(6,1)
         # print(self._kin.forward_velocity_kinematics(), type(self._kin.forward_velocity_kinematics()))
 
-        current_velocity = np.array(np.matmul(self._kin.jacobian(), get_joint_velocities(self._limb))).reshape(-1)
+        current_velocity = np.array(np.matmul(self._kin.jacobian(), get_joint_velocities(self._limb))).reshape(6,1)
         # current_velocity = np.concatenate((current_velocity, np.array([0,0,0])))
-        target_velocity = np.concatenate((target_velocity, np.array([np.pi,0,np.pi]))).flatten()
+        target_velocity = np.concatenate((target_velocity, np.array([0,0,0]))).reshape(6,1)
         e = current_position- target_position 
         d_e = current_velocity- target_velocity 
         d_x = target_velocity - np.matmul(self.Kp, e) - np.matmul(self.Kv, d_e)
-        d_q = np.array(np.matmul(self._kin.jacobian_pseudo_inverse(), d_x)).reshape(-1)
+        d_q = np.array(np.matmul(self._kin.jacobian_pseudo_inverse(), d_x)).reshape(7,1)
         # print(joint_array_to_dict(d_q, self._limb))
         self._limb.set_joint_velocities(joint_array_to_dict(d_q, self._limb))
 
