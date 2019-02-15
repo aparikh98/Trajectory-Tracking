@@ -46,9 +46,11 @@ def lookup_tag(tag_number):
     3x' :obj:`numpy.ndarray`
         tag position
 
-    """
-    return [np.array([0.6, 0.3, 0.11])]
-    # return [np.array([0.5, 0, 0.36881026]), np.array([0.78, 0, 0.26881026]), np.array([0.78, 0.4, 0.26881026])] 
+    """ 
+    # return [np.array([0.57, 0.2, 0.24881026]), np.array([0.7, 0.2, 0.10881026]), np.array([0.7, 0.57, 0.10881026])] 
+
+    return [np.array([0.7, 0.6, 0.24881026])]
+    # return [np.array([0.7, 0.5, 0.24881026]), np.array([0.7, .3, 0.10881026]), np.array([0.5, 0.3, 0.10881026])] 
     # listener = tf.TransformListener()
     # rospy.sleep(1)
     # from_frame = 'base'
@@ -119,8 +121,8 @@ def get_controller(controller_name):
     """
     if controller_name == 'workspace':
         # YOUR CODE HERE
-        Kp = 8* np.array([1,0.65,0.5,0.01,0.01, 0.01])
-        Kv = 0.3 * np.array([3,0.5, 1, 1,1,1])
+        Kp = 4* np.array([1,0.65,0.1,0.01,0.01, 0.01])
+        Kv = 0.07 * np.array([3,0.5, 1, 1,1,1])
         controller = PDWorkspaceVelocityController(limb, kin, Kp, Kv)
     elif controller_name == 'jointspace':
         # YOUR CODE HERE
@@ -129,20 +131,20 @@ def get_controller(controller_name):
         controller = PDJointVelocityController(limb, kin, Kp, Kv)
     elif controller_name == 'torque':
         # YOUR CODE HERE
-        Kp = 8 * np.array([1, 1,1,1,0.5,0.5, 0.3])
-        Kv = 3 * np.array([1.5, 1.5,1,1,0.3,0.3, 0.3])
+        Kp = 8 * np.array([1, 1,1.5,1,0.5,0.5, 0.3])
+        Kv = 3 * np.array([2, 2,1,1,0.3,0.3, 0.3])
         controller = PDJointTorqueController(limb, kin, Kp, Kv)
     elif controller_name == 'workspace_impedance':
         # YOUR CODE HERE
-        Md = 0.01 * np.array([1, 1,1,1,1,1])
-        Bd = 0.01 * np.array([1, 1,1,1,1,1])
-        Kd = 0.01 * np.array([1, 1,1,1,1,1])
-
+        Md = 1 * np.array([1, 1,1,1,1,1])
+        Bd = 1.5* np.array([1,1,1,0.2,0.2,0.2])
+        Kd = 3* np.array([15,5,9,0.1,0.1,0.1])
+        print("HELLO")
         controller = WorkspaceImpedanceController(limb, kin, Md, Bd, Kd)
     elif controller_name == 'jointspace_impedance':
         # YOUR CODE HERE
-        Kd = 8 * np.array([1, 1,1,1,60,50, 50])
-        Bd = 3 * np.array([1.5, 1.5,1,1,20,20, 20])
+        Kd = 8 * np.array([1, 1,1.5,1,0.5,0.5, 0.3])
+        Bd = 3 * np.array([2, 2,1,1,0.3,0.3, 0.3])
         Md = 1 * np.array([1, 1,1,1,1,1,1])
         # Kd = 0 * np.array([1, 1,1,1,1,0,0])
         controller = JointspaceImpedanceController(limb, kin, Md, Bd, Kd)
@@ -168,8 +170,10 @@ if __name__ == "__main__":
 
     python scripts/main.py -t circle -c jointspace -ar 5 --log
     python scripts/main.py -t line -c jointspace -ar 5 --log
-    python scripts/main.py -t line -c torque -ar 5 --log
+
     python scripts/main.py -t line -c jointspace -ar 4 --log
+    python scripts/main.py -t line -c workspace_impedance -ar 4 --log
+    python scripts/main.py -t line -c torque -ar 4 --log
 
     You can also change the rate, timeout if you want
     """
@@ -231,7 +235,7 @@ if __name__ == "__main__":
     # of the trajectory
     # print(robot_trajectory)
     planner = PathPlanner('{}_arm'.format(args.arm))
-    if args.controller_name == "workspace":
+    if args.controller_name == "workspace" or args.controller_name == "workspace_impedance":
         pose = create_pose_stamped_from_pos_quat(
             robot_trajectory.joint_trajectory.points[0].positions,
             [0, 1, 0, 0],

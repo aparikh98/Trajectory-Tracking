@@ -6,6 +6,8 @@ Author: Chris Correa
 """
 import numpy as np
 import math
+# import matplotlib
+# matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
@@ -132,7 +134,7 @@ class MotionPath:
         plt.xlabel("Time (t)")
         plt.ylabel("z acceleration")
 
-
+        plt.pause(0.1)
         plt.show()
 
     def to_robot_trajectory(self, num_waypoints=300, jointspace=True):
@@ -249,7 +251,7 @@ class LinearPath(MotionPath):
         self.distance = self.goal - self.current_position
         radius = np.linalg.norm(self.current_position - self.goal,ord = 2)
 
-        self.total_time = radius * 5
+        self.total_time = radius * 12
 
 
     def target_position(self, time):
@@ -348,7 +350,7 @@ class CircularPath(MotionPath):
         self.radius = np.linalg.norm(self.current_position - self.goal,ord = 2)
         self.circumference = 2 * math.pi * self.radius
         self.theta_0 =  np.pi - np.arctan2((self.current_position[1] - self.goal[1]),(self.goal[0]-self.current_position[0]))
-        self.total_time = self.circumference * 5
+        self.total_time = self.circumference * 10
         # print("radius", self.radius)
         # print("theta 0" , self.theta_0)
 
@@ -437,9 +439,7 @@ class CircularPath(MotionPath):
 
         alpha, omega, theta = self.angular_kinematics(time)
         theta = theta + self.theta_0         
-        acceleration = -self.radius * (omega ** 2) * np.array([np.cos(theta), np.sin(theta), 0])
-        # acceleration[0] = -1 * acceleration[0]
-        # acceleration[1] = -1 * acceleration[1]
+        acceleration =  self.radius *  np.array([-alpha * np.sin(theta) - omega **2 * np.cos(theta), alpha * np.cos(theta) - omega **2 * np.sin(theta), 0])
         return acceleration
 
     def plot(self, num=300):
@@ -456,6 +456,8 @@ class CircularPath(MotionPath):
 
         plt.xlabel("x")
         plt.ylabel("y")
+        plt.pause(0.1)
+
         plt.show()
 
 class MultiplePaths(MotionPath):
@@ -616,6 +618,7 @@ class MultiplePaths(MotionPath):
         plt.xlabel("Time (t)")
         plt.ylabel("current time")
 
+        plt.pause(0.1)
 
         plt.show()
 
@@ -623,15 +626,15 @@ class MultiplePaths(MotionPath):
 
 
 
-if __name__ == "__main__":
-    # target_pos = [np.array([0, 0, 3]),np.array([0, 4, 3]),np.array([4, 0, 3]),np.array([-0.3, 0.3, 3])]
-    total_time = 10
-    current_position = np.array([0.53, 0.54, 3])
-    target_pos = np.array([0.4, 0.54, 3])
-    current_velocity = np.array([0.3, 0.4, 0])
+# if __name__ == "__main__":
+#     # target_pos = [np.array([0, 0, 3]),np.array([0, 4, 3]),np.array([4, 0, 3]),np.array([-0.3, 0.3, 3])]
+#     total_time = 10
+#     current_position = np.array([0.53, 0.54, 3])
+#     target_pos = np.array([0.4, 0.54, 3])
+#     current_velocity = np.array([0.3, 0.4, 0])
 
-    path = LinearPath(None, None, target_pos, current_position)
-    # path = CircularPath(None, None, target_pos[3], current_position)
-    # path = MultiplePaths(None, None, target_pos, current_position)
+#     # path = LinearPath(None, None, target_pos, current_position)
+#     path = CircularPath(None, None, target_pos, current_position)
+#     # path = MultiplePaths(None, None, target_pos, current_position)
 
-    path.plot()
+#     path.plot()
