@@ -47,28 +47,25 @@ def lookup_tag(tag_number):
         tag position
 
     """ 
-    # return [np.array([0.57, 0.2, 0.24881026]), np.array([0.7, 0.2, 0.10881026]), np.array([0.7, 0.57, 0.10881026])] 
 
-    return [np.array([0.7, 0.6, 0.24881026])]
-    # return [np.array([0.7, 0.5, 0.24881026]), np.array([0.7, .3, 0.10881026]), np.array([0.5, 0.3, 0.10881026])] 
-    # listener = tf.TransformListener()
-    # rospy.sleep(1)
-    # from_frame = 'base'
-    # to_frame = 'ar_marker_{}'.format(tag_number)
+    listener = tf.TransformListener()
+    rospy.sleep(1)
+    from_frame = 'base'
+    to_frame = 'ar_marker_{}'.format(tag_number)
 
-    # r = rospy.Rate(200)
-    # while (
-    #     not listener.frameExists(from_frame) or not listener.frameExists(to_frame) 
-    #     # not listener.waitForTransform(from_frame, to_frame, rospy.Time(), rospy.Duration(0.1))
-    # ) and (
-    #     not rospy.is_shutdown()
-    # ):
-    #     print 'Cannot find AR marker {}, retrying'.format(tag_number)
-    #     r.sleep()
+    r = rospy.Rate(200)
+    while (
+        not listener.frameExists(from_frame) or not listener.frameExists(to_frame) 
+        # not listener.waitForTransform(from_frame, to_frame, rospy.Time(), rospy.Duration(0.1))
+    ) and (
+        not rospy.is_shutdown()
+    ):
+        print 'Cannot find AR marker {}, retrying'.format(tag_number)
+        r.sleep()
 
-    # t = listener.getLatestCommonTime(from_frame, to_frame)
-    # tag_pos, _ = listener.lookupTransform(from_frame, to_frame, t)
-    # return vec(tag_pos)
+    t = listener.getLatestCommonTime(from_frame, to_frame)
+    tag_pos, _ = listener.lookupTransform(from_frame, to_frame, t)
+    return vec(tag_pos)
 
 def get_trajectory(task, tag_pos, num_way, controller_name):
     """
@@ -89,9 +86,7 @@ def get_trajectory(task, tag_pos, num_way, controller_name):
 
     #TODO part a
     current_position = kin.forward_position_kinematics()[:3];
-    print("Current Position", current_position)
     target_pos = tag_pos[0]
-    print("target position", tag_pos)
     if task == 'line':
         target_pos[0][2] = current_position[2]; #linear path moves to a Z position above AR Tag.
         path = LinearPath(limb, kin, target_pos[0], current_position)
@@ -131,23 +126,19 @@ def get_controller(controller_name):
         controller = PDJointVelocityController(limb, kin, Kp, Kv)
     elif controller_name == 'torque':
         # YOUR CODE HERE
-        Kp = 8 * np.array([1, 1,1.5,1,0.5,0.5, 0.3])
-        Kv = 3 * np.array([2, 2,1,1,0.3,0.3, 0.3])
+        Kp = 8 * np.array([1, 1,1.5,1.5,1,1, 1])
+        Kv = 5 * np.array([2, 2,1,1,0.8,0.3, 0.3])
         controller = PDJointTorqueController(limb, kin, Kp, Kv)
     elif controller_name == 'workspace_impedance':
         # YOUR CODE HERE
-        Md = 1 * np.array([1, 1,1,1,1,1])
-        Bd = 1.5* np.array([1,1,1,0.2,0.2,0.2])
-        Kd = 3* np.array([15,5,9,0.1,0.1,0.1])
-        print("HELLO")
-        controller = WorkspaceImpedanceController(limb, kin, Md, Bd, Kd)
+        Bd = 0.5* np.array([1,1,1,0.2,0.2,0.2]) #derivative
+        Kd = 3* np.array([15,5,9,0.1,0.1,0.1]) #proportional
+        controller = WorkspaceImpedanceController(limb, kin, Bd, Kd)
     elif controller_name == 'jointspace_impedance':
         # YOUR CODE HERE
         Kd = 8 * np.array([1, 1,1.5,1,0.5,0.5, 0.3])
         Bd = 3 * np.array([2, 2,1,1,0.3,0.3, 0.3])
-        Md = 1 * np.array([1, 1,1,1,1,1,1])
-        # Kd = 0 * np.array([1, 1,1,1,1,0,0])
-        controller = JointspaceImpedanceController(limb, kin, Md, Bd, Kd)
+        controller = JointspaceImpedanceController(limb, kin, Bd, Kd)
 
     elif controller_name == 'open_loop':
         controller = FeedforwardJointVelocityController(limb, kin)

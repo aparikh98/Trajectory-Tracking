@@ -251,7 +251,7 @@ class LinearPath(MotionPath):
         self.distance = self.goal - self.current_position
         radius = np.linalg.norm(self.current_position - self.goal,ord = 2)
 
-        self.total_time = radius * 12
+        self.total_time = radius * 4
 
 
     def target_position(self, time):

@@ -589,19 +589,17 @@ class PDWorkspaceVelocityController(Controller):
         """
         current_position = self._kin.forward_position_kinematics()[:3]
         current_orientation = np.asarray(tf.transformations.euler_from_quaternion(self._kin.forward_position_kinematics()[3:]))
-        # current_position = get_joint_positions(self._limb)
         current_position = np.concatenate((current_position,current_orientation)).reshape(6,1)
         target_position = np.concatenate((target_position, np.array([np.pi,0,np.pi]))).reshape(6,1)
-        # print(self._kin.forward_velocity_kinematics(), type(self._kin.forward_velocity_kinematics()))
-
         current_velocity = np.array(np.matmul(self._kin.jacobian(), get_joint_velocities(self._limb))).reshape(6,1)
-        # current_velocity = np.concatenate((current_velocity, np.array([0,0,0])))
         target_velocity = np.concatenate((target_velocity, np.array([0,0,0]))).reshape(6,1)
+       
         e = current_position- target_position 
         d_e = current_velocity- target_velocity 
+        
         d_x = target_velocity - np.matmul(self.Kp, e) - np.matmul(self.Kv, d_e)
         d_q = np.array(np.matmul(self._kin.jacobian_pseudo_inverse(), d_x)).reshape(7,1)
-        # print(joint_array_to_dict(d_q, self._limb))
+        
         self._limb.set_joint_velocities(joint_array_to_dict(d_q, self._limb))
 
 class PDJointVelocityController(Controller):
@@ -640,16 +638,12 @@ class PDJointVelocityController(Controller):
         target_velocity: 7x' :obj:`numpy.ndarray` of desired velocities
         target_acceleration: 7x' :obj:`numpy.ndarray` of desired accelerations
         """
-        # current_position = self._limb.inverse_kinematics(self._kin.forward_position_kinematics()[:3], self._kin.forward_position_kinematics()[3:])
         current_position = get_joint_positions(self._limb)
         current_velocity = get_joint_velocities(self._limb)
-        # current_velocity = self._kin.forward_velocity_kinematics()
         e = current_position - target_position 
         d_e = current_velocity- target_velocity 
-
+        
         d_x = target_velocity - np.matmul(self.Kp, e) - np.matmul(self.Kv, d_e)
-
-
         self._limb.set_joint_velocities(joint_array_to_dict(d_x, self._limb))
 
 class PDJointTorqueController(Controller):
@@ -685,8 +679,10 @@ class PDJointTorqueController(Controller):
         """
         target_position = target_position.reshape((7,1))
         target_velocity = target_velocity.reshape((7,1))
+        target_acceleration = target_acceleration.reshape((7,1))    
         current_position = get_joint_positions(self._limb).reshape((7,1))
         current_velocity = get_joint_velocities(self._limb).reshape((7,1))
+        
         e = current_position - target_position 
         d_e = current_velocity- target_velocity
         
@@ -697,20 +693,10 @@ class PDJointTorqueController(Controller):
         coriolis = self._kin.coriolis(positions_dict, velocity_dict)[0][0]
         coriolis = np.array([float(coriolis[i]) for i in range(7)]).reshape((7,1))
 
-                # gravity = np.array(np.matmul(self._kin.jacobian_transpose(positions_dict),np.array([0,0,1.52,0,0,0]))).reshape(-1)
         gravity_accel = np.array([0,0,.981,0,0,0]).reshape((6,1))
         gravity_jointspace = (np.matmul(self._kin.jacobian_transpose(positions_dict), gravity_accel))
         gravity = (np.matmul(inertia, gravity_jointspace)).reshape((7,1))
-
-        # print(gravity_workspace, gravity_workspace.shape)
-        # gravity_workspace = np.array(gravity_workspace).reshape(-1)
-        # print(gravity_workspace, gravity_workspace.shape)
-        # print(np.matmul(self._kin.jacobian_transpose(positions_dict),gravity_workspace))
-        # print(np.matmul(inertia, target_acceleration), inertia, target_acceleration)
-        # torque = gravity
-        # torque = np.array(np.matmul(inertia, target_acceleration)).reshape((7,1)) + gravity + coriolis
-        # torque = np.array(np.matmul(inertia, target_acceleration)).reshape(-1) + gravity
-        target_acceleration = target_acceleration.reshape((7,1))
+        
         torque = np.array(np.matmul(inertia, target_acceleration) +\
             coriolis + gravity + (-np.matmul(self.Kv,d_e).reshape((7,1)) - np.matmul(self.Kp,e).reshape((7,1))))
         torque_dict = joint_array_to_dict(torque, self._limb)
@@ -727,7 +713,7 @@ class PDJointTorqueController(Controller):
 ######################
 
 class WorkspaceImpedanceController(Controller):
-    def __init__(self, limb, kin, Md, Bd, Kd):
+    def __init__(self, limb, kin, Bd, Kd):
         """
         Parameters
         ----------
@@ -737,7 +723,6 @@ class WorkspaceImpedanceController(Controller):
         Kv : 6x' :obj:`numpy.ndarray`
         """
         Controller.__init__(self, limb, kin)
-        self.Md = np.diag(Md)
         self.Bd = np.diag(Bd)
         self.Kd = np.diag(Kd)
 
@@ -772,34 +757,24 @@ class WorkspaceImpedanceController(Controller):
         velocity_dict = joint_array_to_dict(current_velocity_js, self._limb)
 
         inertia = self._kin.inertia(positions_dict)
-        
         jt = self._kin.jacobian_transpose(positions_dict)
 
         gravity_accel = np.array([0,0,.981,0,0,0]).reshape((6,1))
         gravity_jointspace = (np.matmul(jt, gravity_accel))
         gravity = (np.matmul(inertia, gravity_jointspace)).reshape((7,1))
 
+        feedforward = np.matmul(inertia, np.matmul(jt,  np.array(target_acceleration)).reshape((7,1)))
 
-        feedforward = np.matmul(inertia,\
-            np.matmul(jt,  np.array(target_acceleration)).reshape((7,1)))
-
-        feedback = np.matmul(jt, np.matmul(self.Bd, d_e).reshape((6,1)) +np.matmul(self.Kd, e).reshape((6,1))
-            ).reshape(7,1)
+        feedback = np.matmul(jt, np.matmul(self.Bd, d_e).reshape((6,1)) +np.matmul(self.Kd, e).reshape((6,1))).reshape(7,1)
 
         torque =  gravity - feedback + feedforward
-        # torque = gravity
-        # print(np.matmul(np.identity(7) -np.matmul(jt, np.linalg.pinv(jt))))
-        # torque_ns = np.array(np.matmul(np.identity(7) -np.matmul(jt, np.linalg.pinv(jt)), torque))
-        # print(torque_ns.shape)
         torque = torque.reshape((7,1))
-        # torque_ns = torque_ns.reshape((7,1))
-        # torque += torque_ns
 
         torque_dict = joint_array_to_dict(torque, self._limb)
         self._limb.set_joint_torques(torque_dict)
         
 class JointspaceImpedanceController(Controller):
-    def __init__(self, limb, kin, Md, Bd, Kd):
+    def __init__(self, limb, kin, Bd, Kd):
         """
         Parameters
         ----------
@@ -809,7 +784,6 @@ class JointspaceImpedanceController(Controller):
         Kv : 7x' :obj:`numpy.ndarray`
         """
         Controller.__init__(self, limb, kin)
-        self.Md = np.diag(Md)
         self.Bd = np.diag(Bd)
         self.Kd = np.diag(Kd)
 
@@ -831,10 +805,9 @@ class JointspaceImpedanceController(Controller):
         positions_dict = joint_array_to_dict(current_position, self._limb)
         velocity_dict = joint_array_to_dict(current_velocity, self._limb)
         
-        # self.Md = self._kin.inertia(joint_array_to_dict(target_position, self._limb))
+        inertia = self._kin.inertia(joint_array_to_dict(target_position, self._limb))
+        Md = inertia   
 
-        inertia = self._kin.inertia()
-        self.Md = inertia   
         coriolis = self._kin.coriolis(positions_dict, velocity_dict)[0][0]
         coriolis = np.array([float(coriolis[i]) for i in range(7)]).reshape((7,1))
 
@@ -842,10 +815,7 @@ class JointspaceImpedanceController(Controller):
         gravity_jointspace = (np.matmul(self._kin.jacobian_transpose(), gravity_accel))
         gravity = (np.matmul(inertia, gravity_jointspace))
 
-        feedback = (np.matmul(self.Bd, d_e) +np.matmul(self.Kd, e)).reshape((7,1))
-        feedback = np.array(target_acceleration).reshape((7,1)) - np.matmul(np.linalg.inv(self.Md),feedback)
-
-        feedback =  np.matmul(inertia,  feedback)
+        feedback =  np.matmul(inertia,  np.array(target_acceleration).reshape((7,1)) - np.matmul(np.linalg.inv(Md),np.matmul(self.Bd, d_e) +np.matmul(self.Kd, e)).reshape((7,1)))
 
         force = coriolis + gravity + feedback
         torque_dict = joint_array_to_dict(force, self._limb)
