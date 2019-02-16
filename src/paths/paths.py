@@ -438,12 +438,12 @@ class CircularPath(MotionPath):
         """
 
         alpha, omega, theta = self.angular_kinematics(time)
-        theta = theta + self.theta_0         
+        theta = theta + self.theta_0
         acceleration =  self.radius *  np.array([-alpha * np.sin(theta) - omega **2 * np.cos(theta), alpha * np.cos(theta) - omega **2 * np.sin(theta), 0])
         return acceleration
 
     def plot(self, num=300):
-    	MotionPath.plot(self)
+        MotionPath.plot(self)
         times = np.linspace(0, self.total_time, num=num)
         target_positions = np.vstack([self.target_position(t) for t in times])
         target_velocities = np.vstack([self.target_velocity(t) for t in times])
@@ -472,17 +472,6 @@ class MultiplePaths(MotionPath):
         MotionPath.__init__(self, limb, kin, total_time = 0)
         #TODO: figure out how to get this stuff
         self.numpaths = len(paths)+1
-        if self.numpaths != 4:
-            return
-        # paths = sorted(paths, key=lambda a: a[0])
-        # if (paths[0][1] > paths[1][1]):
-        #     temp = paths[0]
-        #     paths[0] = paths[1]
-        #     paths[1] = temp
-        # if (paths[2][1] < paths[3][1]):
-        #     temp = paths[2]
-        #     paths[2] = paths[3]
-        #     paths[3] = temp
         self.paths = paths
         print("current_position", current_position)
         print("path", self.paths)
@@ -493,12 +482,18 @@ class MultiplePaths(MotionPath):
         self.trajectories.append(LinearPath(limb, kin, current_position, paths[2]))
         self.total_time = sum(t.total_time for t in self.trajectories)
         print(self.total_time)
-        self.time_on_path = [t.total_time for t in self.trajectories]
+        self.path_times = [t.total_time for t in self.trajectories]
+        print(self.path_times)
 
     def get_current_path(self, time):
-        curpath = min((int)(time/(self.total_time) * self.numpaths), self.numpaths-1)
+        curpath = 0
+        i = 0
+        while(i < time):
+            i += self.path_times[curpath]
+            curpath+=1
+        curpath -=1
         if curpath > 0:
-            time_on_path = time - sum(self.time_on_path[:curpath])
+            time_on_path = time - sum(self.path_times[:curpath])
         else:
             time_on_path = time
         return curpath, time_on_path
@@ -627,14 +622,13 @@ class MultiplePaths(MotionPath):
 
 
 # if __name__ == "__main__":
-#     # target_pos = [np.array([0, 0, 3]),np.array([0, 4, 3]),np.array([4, 0, 3]),np.array([-0.3, 0.3, 3])]
+#     target_pos = [np.array([0, 0, 3]),np.array([0, 4, 3]),np.array([4, 0, 3]),np.array([-0.3, 0.3, 3])]
 #     total_time = 10
 #     current_position = np.array([0.53, 0.54, 3])
-#     target_pos = np.array([0.4, 0.54, 3])
-#     current_velocity = np.array([0.3, 0.4, 0])
-
+#     # target_pos = np.array([0.4, 0.54, 3])
+#
 #     # path = LinearPath(None, None, target_pos, current_position)
-#     path = CircularPath(None, None, target_pos, current_position)
-#     # path = MultiplePaths(None, None, target_pos, current_position)
-
+#     # path = CircularPath(None, None, target_pos, current_position)
+#     path = MultiplePaths(None, None, target_pos, current_position)
+#
 #     path.plot()
